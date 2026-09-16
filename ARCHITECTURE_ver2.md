@@ -1,0 +1,57 @@
+# GUxSID Human Graphics ver2 architecture
+
+ver2 keeps the current visual behavior while separating the runtime into five
+stages. Each stage receives plain data and can be replaced without changing the
+stages before it.
+
+```text
+PersonSegmenter (Detection)
+  -> ObjectTracker
+  -> GeometryProcessor
+       -> VertexRemapper
+       -> OffsetProcessor
+  -> SceneComposer
+       -> merge / grouping
+       -> SceneObject
+  -> RenderRecipe
+       -> BasePass
+       -> StrokePass
+       -> ShapePainter
+```
+
+Each `SceneObject` also owns an `AppearanceComponent` with independent Base
+and Outline Material slots. `Solid` and `LinearGradient` are currently
+available; materials are assigned from the palette without repeating their
+primary color on the same screen.
+
+## Ownership
+
+- `core/`: data and enums shared across stages.
+- `tracking/`: assigns stable IDs to detection results.
+- `geometry/`: performs per-object vertex remapping and optional offset.
+- `scene/`: owns drawable objects, transforms, instances, and composition.
+- `render/`: turns SceneObjects into pixels. It does not run detection or edit
+  source geometry.
+- `scene4.*`: connects the stages and translates existing GUI settings into
+  stage-specific settings.
+
+## Extension points
+
+- Add a visual style by implementing `RenderRecipe`.
+- Add partial strokes or decorations through reusable material and painter operations
+  and dedicated RenderPass classes.
+- Move or clone a detected object through `SceneObject::transform` and
+  `SceneObject::clone()` without changing detection data.
+- Replace `ObjectTracker` with a more advanced tracker while keeping ObjectId.
+- MIDI and network synchronization should target SceneObject commands and
+  parameter IDs, not call RenderPass classes directly.
+
+## Compatibility contract
+
+`CurrentRenderRecipe` reproduces the previous Base and Stroke drawing. The
+existing offset algorithm, contact merge behavior, inset-line preservation,
+palette assignment, GUI values, and video export flow are retained.
+
+ver2 stores its GUI settings and crash marker under
+`Application Support/GUxSID_Human_Graphics_ver2`, independently from the
+original project.

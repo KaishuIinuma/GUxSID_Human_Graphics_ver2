@@ -1,0 +1,27 @@
+{
+  "configurations": [
+    {
+      "name": "macOS openFrameworks",
+      "compilerPath": "/usr/bin/clang++",
+      "cStandard": "c17",
+      "cppStandard": "c++17",
+      "includePath": [
+        "${workspaceFolder}/src",
+        "/Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/libs/openFrameworks",
+        "/Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/libs/**",
+        "/Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/src",
+        "/Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include",
+        "/Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxGui/src"
+      ],
+      "defines": [
+        "TARGET_OSX"
+      ],
+      "macFrameworkPath": [
+        "${sysroot}/System/Library/Frameworks",
+        "${sysroot}/System/Library/Frameworks/AudioToolbox.framework/Headers",
+        "${sysroot}/System/Library/Frameworks/CoreAudio.framework/Headers"
+      ]
+    }
+  ],
+  "version": 4
+}

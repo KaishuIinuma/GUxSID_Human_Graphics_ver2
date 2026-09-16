@@ -1,0 +1,18 @@
+{
+  "ControlsSettings": {
+    "Flip_Horizontal": "0",
+    "Person_Confidence": "0.6",
+    "Vertex_Count": "16",
+    "Color_Update_Interval__s_": "10",
+    "S4_Base_Enable": "1",
+    "S4_Offset_Enable": "1",
+    "S4_Stroke_Enable": "1",
+    "S4_Offset_Size": "200",
+    "S4_Offset_Scale": "1",
+    "S4_Offset_Round_Mode": "1",
+    "S4_Stroke_Weight": "10",
+    "S4_Stroke_Round_Mode": "1",
+    "Realtime_FPS": "30",
+    "Video_FPS": "30"
+  }
+}
