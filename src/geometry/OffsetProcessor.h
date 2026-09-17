@@ -98,7 +98,7 @@ inline void removeCoincidentPoints(std::vector<glm::vec3>& points) {
 class OffsetProcessor {
  public:
   ofPolyline process(const ofPolyline& polyline, float offset,
-                     Scene4OffsetJoinType joinType, float arcRadius = -1.0f,
+                     OffsetJoinType joinType, float arcRadius = -1.0f,
                      int arcResolution = 20) const {
     if (polyline.size() < 3) return polyline;
     if (arcResolution < 1) arcResolution = 1;
@@ -154,7 +154,7 @@ class OffsetProcessor {
                            previousDirection.y * currentDirection.x;
       const bool isConvex = crossZ * orientationSign > 0.0f;
 
-      if (isConvex && joinType == Scene4OffsetJoinType::Round) {
+      if (isConvex && joinType == OffsetJoinType::Round) {
         const glm::vec3 startVector = edges[previousIndex].end - center;
         const glm::vec3 endVector = edges[i].start - center;
         const float baseRadius = glm::length(startVector);

@@ -597,16 +597,17 @@ obj/osx/Debug/src/main.o: \
   /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/src/ofxCvContourFinder.h \
   /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/src/ofxCvHaarFinder.h \
   src/BaseScene.h src/core/HumanContourData.h src/PersonSegmenter.h \
-  src/scene4.h src/core/VisualTypes.h src/geometry/GeometryProcessor.h \
-  src/geometry/GeometryObject.h src/tracking/TrackedObject.h \
-  src/geometry/OffsetProcessor.h src/geometry/VertexRemapper.h \
-  src/material/MaterialAssignmentSystem.h src/scene/SceneObject.h \
-  src/scene/AppearanceComponent.h src/render/CurrentRenderRecipe.h \
-  src/render/BasePass.h src/render/RenderPass.h \
-  src/render/RenderContext.h src/material/MaterialPainter.h \
-  src/render/ShapePainter.h src/render/RenderRecipe.h \
-  src/render/StrokePass.h src/scene/SceneComposer.h \
-  src/tracking/ObjectTracker.h src/video_Processing.h
+  src/HumanGraphicsScene.h src/core/VisualTypes.h \
+  src/geometry/GeometryProcessor.h src/geometry/GeometryObject.h \
+  src/tracking/TrackedObject.h src/geometry/OffsetProcessor.h \
+  src/geometry/VertexRemapper.h src/material/MaterialAssignmentSystem.h \
+  src/scene/SceneObject.h src/scene/AppearanceComponent.h \
+  src/render/StandardRenderRecipe.h src/render/BasePass.h \
+  src/render/RenderPass.h src/render/RenderContext.h \
+  src/material/MaterialPainter.h src/render/ShapePainter.h \
+  src/render/RenderRecipe.h src/render/StrokePass.h \
+  src/scene/SceneComposer.h src/tracking/ObjectTracker.h \
+  src/video_Processing.h
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/SDKSettings.json:
 src/ofApp.h:
 /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/libs/openFrameworks/app/ofAppGLFWWindow.h:
@@ -1207,7 +1208,7 @@ src/ofApp.h:
 src/BaseScene.h:
 src/core/HumanContourData.h:
 src/PersonSegmenter.h:
-src/scene4.h:
+src/HumanGraphicsScene.h:
 src/core/VisualTypes.h:
 src/geometry/GeometryProcessor.h:
 src/geometry/GeometryObject.h:
@@ -1217,7 +1218,7 @@ src/geometry/VertexRemapper.h:
 src/material/MaterialAssignmentSystem.h:
 src/scene/SceneObject.h:
 src/scene/AppearanceComponent.h:
-src/render/CurrentRenderRecipe.h:
+src/render/StandardRenderRecipe.h:
 src/render/BasePass.h:
 src/render/RenderPass.h:
 src/render/RenderContext.h:

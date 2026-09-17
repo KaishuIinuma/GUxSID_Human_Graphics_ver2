@@ -23,7 +23,7 @@ class MaterialPainter {
 
   void drawStroke(const ofPolyline& polygon,
                   const MaterialComponent& material, float strokeWeight,
-                  Scene4StrokeJoinType joinType) const {
+                  StrokeJoinType joinType) const {
     if (material.type == MaterialType::Solid) {
       shapePainter.drawStroke(polygon, material.primary, strokeWeight, joinType);
       return;
@@ -88,7 +88,7 @@ class MaterialPainter {
   static void drawLinearGradientStroke(const ofPolyline& polygon,
                                        const MaterialComponent& material,
                                        float strokeWeight,
-                                       Scene4StrokeJoinType joinType) {
+                                       StrokeJoinType joinType) {
     if (polygon.size() < 3) return;
     const GradientAxis axis = gradientAxis(polygon, material);
     for (size_t i = 0; i < polygon.size(); ++i) {
@@ -116,7 +116,7 @@ class MaterialPainter {
       }
 
       ofSetColor(firstColor);
-      if (joinType == Scene4StrokeJoinType::Round) {
+      if (joinType == StrokeJoinType::Round) {
         ofDrawCircle(p1, strokeWeight * 0.5f);
         continue;
       }

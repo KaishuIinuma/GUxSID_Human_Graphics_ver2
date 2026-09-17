@@ -2379,7 +2379,7 @@
 			"fileEncoding": "4",
 			"isa": "PBXFileReference",
 			"lastKnownFileType": "sourcecode.cpp.h",
-			"name": "scene4.h",
+			"name": "HumanGraphicsScene.h",
 			"sourceTree": "<group>"
 		},
 		"41466B04-1EBF-46DA-86CE-1BFFB92EF100": {
@@ -6743,7 +6743,7 @@
 			"fileEncoding": "4",
 			"isa": "PBXFileReference",
 			"lastKnownFileType": "sourcecode.cpp.cpp",
-			"name": "scene4.cpp",
+			"name": "HumanGraphicsScene.cpp",
 			"sourceTree": "<group>"
 		},
 		"B1D56002-8DB0-4470-A858-272363421D07": {

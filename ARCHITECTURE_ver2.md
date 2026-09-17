@@ -32,7 +32,7 @@ primary color on the same screen.
 - `scene/`: owns drawable objects, transforms, instances, and composition.
 - `render/`: turns SceneObjects into pixels. It does not run detection or edit
   source geometry.
-- `scene4.*`: connects the stages and translates existing GUI settings into
+- `HumanGraphicsScene.*`: connects the stages and translates existing GUI settings into
   stage-specific settings.
 
 ## Extension points
@@ -48,7 +48,8 @@ primary color on the same screen.
 
 ## Compatibility contract
 
-`CurrentRenderRecipe` reproduces the previous Base and Stroke drawing. The
+`StandardRenderRecipe` (`standard_render`) is the reference Recipe and
+reproduces the previous Base-then-Stroke drawing. The
 existing offset algorithm, contact merge behavior, inset-line preservation,
 palette assignment, GUI values, and video export flow are retained.
 

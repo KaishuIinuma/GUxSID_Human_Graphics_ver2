@@ -12,7 +12,7 @@ struct GeometrySettings {
   bool enableOffset = true;
   float offsetSize = 200.0f;
   float offsetScale = 1.0f;
-  Scene4OffsetJoinType offsetJoinType = Scene4OffsetJoinType::Round;
+  OffsetJoinType offsetJoinType = OffsetJoinType::Round;
 };
 
 class GeometryProcessor {

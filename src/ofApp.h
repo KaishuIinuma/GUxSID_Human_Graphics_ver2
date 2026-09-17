@@ -10,7 +10,7 @@
 #include "BaseScene.h"
 
 #include "PersonSegmenter.h"
-#include "scene4.h"
+#include "HumanGraphicsScene.h"
 #include "video_Processing.h"
 
 // Color Pallate
@@ -56,26 +56,26 @@ public:
 
   static inline int background_color = 255;
 
-  // Scene4の人物グラフィック結合方法。
+  // HumanGraphicsSceneの人物グラフィック結合方法。
   // RenderedGraphic: 実際に描画するポリゴン／ストロークが接触した時だけ結合する。
   // CentroidDistance: 重心間距離が下記の閾値以内の人物を結合する軽量モード。
-  enum class Scene4MergeMode { RenderedGraphic, CentroidDistance };
-  static inline Scene4MergeMode scene4MergeMode =
-      Scene4MergeMode::RenderedGraphic;
+  enum class CompositionMergeMode { RenderedGraphic, CentroidDistance };
+  static inline CompositionMergeMode compositionMergeMode =
+      CompositionMergeMode::RenderedGraphic;
 
   // CentroidDistanceモードで結合する重心間距離（描画座標のピクセル単位）。
   // 必要に応じてここを変更する。
-  static inline float scene4CentroidMergeDistance = 50.0f;
+  static inline float compositionCentroidMergeDistance = 50.0f;
 
   // RenderedGraphicモードの結合判定に使うマスク解像度。
   // 小さくするほど軽くなるが、接触判定の細かさは下がる。
-  static inline float scene4MergeMaskScale = 0.1f;
+  static inline float compositionMergeMaskScale = 0.1f;
 
   // Strokeだけを結合する際の負荷と見た目の調整値。
   // 低解像度マスクでも外周近似を維持するため、均等リサンプリングは使わない。
-  static inline float scene4StrokeMergeMaskMinScale = 0.25f;
-  static inline float scene4StrokeMergeApproximationPx = 6.0f;
-  static inline size_t scene4StrokeMergeMaxVertices = 64;
+  static inline float compositionStrokeMergeMaskMinScale = 0.25f;
+  static inline float compositionStrokeMergeApproximationPx = 6.0f;
+  static inline size_t compositionStrokeMergeMaxVertices = 64;
 
   // ============================================
   // ★追加: Control Window(GUIウィンドウ)のサイズ。
@@ -126,7 +126,7 @@ public:
   // シーン管理
   std::shared_ptr<BaseScene> currentScene;
 
-  std::shared_ptr<Scene4> scene4;
+  std::shared_ptr<HumanGraphicsScene> humanGraphicsScene;
 
   // デバッグ表示フラグ（基本は非表示、Dキーで切り替え）
   bool showDebug = false;
@@ -164,31 +164,31 @@ public:
   ofParameter<int> pVertexCount;        // 頂点数 4〜100
   ofParameter<float> pColorUpdateIntervalSec; // 色の更新頻度(秒) 0〜20
 
-  ofParameter<bool> pScene4EnableBase;   // ベース描画のON/OFF
-  ofParameter<bool> pScene4EnableOffset; // オフセット描画のON/OFF
-  ofParameter<bool> pScene4EnableStroke; // ストローク描画のON/OFF
-  ofParameter<float> pScene4OffsetSize;  // オフセットサイズ
-  ofParameter<float> pScene4OffsetScale;
+  ofParameter<bool> pGraphicsEnableBase;   // ベース描画のON/OFF
+  ofParameter<bool> pGraphicsEnableOffset; // オフセット描画のON/OFF
+  ofParameter<bool> pGraphicsEnableStroke; // ストローク描画のON/OFF
+  ofParameter<float> pGraphicsOffsetSize;  // オフセットサイズ
+  ofParameter<float> pGraphicsOffsetScale;
   ofParameter<bool>
-      pScene4OffsetRound; // オフセット凸角(true: Round, false: Straight)
-  ofParameter<float> pScene4StrokeWeight; // ストローク太さ
+      pGraphicsOffsetRound; // オフセット凸角(true: Round, false: Straight)
+  ofParameter<float> pGraphicsStrokeWeight; // ストローク太さ
   ofParameter<bool>
-      pScene4StrokeRound; // 角モード(true: Round, false: Straight)
+      pGraphicsStrokeRound; // 角モード(true: Round, false: Straight)
   // 0: Solid / 1: Linear Gradient。BaseとOutlineは独立して選択できる。
-  ofParameter<int> pScene4BaseMaterial;
-  ofParameter<int> pScene4StrokeMaterial;
+  ofParameter<int> pGraphicsBaseMaterial;
+  ofParameter<int> pGraphicsStrokeMaterial;
 
   // GUIリスナー関数
-  void onScene4EnableBaseChanged(bool &value);
-  void onScene4EnableOffsetChanged(bool &value);
-  void onScene4EnableStrokeChanged(bool &value);
-  void onScene4OffsetSizeChanged(float &value);
-  void onScene4OffsetScaleChanged(float &value);
-  void onScene4OffsetRoundChanged(bool &value);
-  void onScene4StrokeWeightChanged(float &value);
-  void onScene4StrokeRoundChanged(bool &value);
-  void onScene4BaseMaterialChanged(int &value);
-  void onScene4StrokeMaterialChanged(int &value);
+  void onGraphicsEnableBaseChanged(bool &value);
+  void onGraphicsEnableOffsetChanged(bool &value);
+  void onGraphicsEnableStrokeChanged(bool &value);
+  void onGraphicsOffsetSizeChanged(float &value);
+  void onGraphicsOffsetScaleChanged(float &value);
+  void onGraphicsOffsetRoundChanged(bool &value);
+  void onGraphicsStrokeWeightChanged(float &value);
+  void onGraphicsStrokeRoundChanged(bool &value);
+  void onGraphicsBaseMaterialChanged(int &value);
+  void onGraphicsStrokeMaterialChanged(int &value);
 
   // ============================================
   // ★追加: Realtime / 動画モード関連のGUIパラメータ
@@ -243,7 +243,7 @@ public:
   // dragEvent / onGuiWindowFileDragged の両方から呼ばれる共通処理
   void handleDroppedFile(const ofDragInfo &dragInfo);
 
-  // 動画のループ再生とは独立して、Scene4をPNG連番として書き出す。
+  // 動画のループ再生とは独立して、HumanGraphicsSceneをPNG連番として書き出す。
   void startImageSequenceExport();
   void updateImageSequenceExport();
   void cancelImageSequenceExport();
@@ -293,7 +293,7 @@ public:
   ofxCvColorImage exportColorImg;
   ofFbo exportFbo;
   ofPixels exportPixels;
-  std::shared_ptr<Scene4> exportScene;
+  std::shared_ptr<HumanGraphicsScene> exportScene;
 
   // カメラ入力
   ofVideoGrabber cam;

@@ -22,7 +22,7 @@ class ShapePainter {
   }
 
   void drawStroke(const ofPolyline& polygon, const ofColor& color,
-                  float strokeWeight, Scene4StrokeJoinType joinType) const {
+                  float strokeWeight, StrokeJoinType joinType) const {
     if (polygon.size() < 3) return;
     ofSetColor(color);
     ofFill();
@@ -42,7 +42,7 @@ class ShapePainter {
         ofPopMatrix();
       }
 
-      if (joinType == Scene4StrokeJoinType::Round) {
+      if (joinType == StrokeJoinType::Round) {
         ofDrawCircle(p1, strokeWeight / 2.0f);
         continue;
       }

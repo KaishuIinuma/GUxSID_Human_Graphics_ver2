@@ -1,11 +1,11 @@
 #pragma once
 
-enum class Scene4StrokeJoinType {
+enum class StrokeJoinType {
   Straight,
   Round
 };
 
-enum class Scene4OffsetJoinType {
+enum class OffsetJoinType {
   Straight,
   Round
 };

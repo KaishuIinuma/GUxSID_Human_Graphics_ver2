@@ -4,7 +4,7 @@
 
 namespace gux {
 
-// デバッグ用の仮マテリアル。Scene4から外せば既存のパレット割り当てへ戻る。
+// デバッグ用の仮マテリアル。HumanGraphicsSceneから外せば既存のパレット割り当てへ戻る。
 class SampleMaterial_Gradient {
  public:
   static MaterialComponent create() {

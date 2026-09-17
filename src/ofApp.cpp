@@ -51,9 +51,9 @@ void ofApp::setup() {
 
   // シーンの初期化（まずはscene1をデフォルトに設定）
   
-  scene4 = std::make_shared<Scene4>();
-  scene4->setup();
-  currentScene = scene4;
+  humanGraphicsScene = std::make_shared<HumanGraphicsScene>();
+  humanGraphicsScene->setup();
+  currentScene = humanGraphicsScene;
 
   // デバッグ画面は基本「非表示」
   showDebug = false;
@@ -103,28 +103,28 @@ void ofApp::setupGuiParameters() {
   pColorUpdateIntervalSec.set("Color Update Interval (s)", static_cast<float>(colorUpdateIntervalMs) / 1000.0f, 0.0f, 20.0f);
  
 
-  pScene4EnableBase.set("S4 Base Enable", true);
-  pScene4EnableOffset.set("S4 Offset Enable", true);
-  pScene4EnableStroke.set("S4 Stroke Enable", true);
-  pScene4OffsetSize.set("S4 Offset Size", 200.0f, 0.0f, 600.0f);
-  pScene4OffsetScale.set("S4 Offset Scale", 1.0f, 0.1f, 2.0f); // ★追加: 0.1(10%)〜2.0(200%)で調整
-  pScene4OffsetRound.set("S4 Offset Round Mode", true);
-  pScene4StrokeWeight.set("S4 Stroke Weight", 10.0f, 0.1f, 200.0f);
-  pScene4StrokeRound.set("S4 Stroke Round Mode", true);
-  pScene4BaseMaterial.set("S4 Base 0:ベタ 1:グラデ", 0, 0, 1);
-  pScene4StrokeMaterial.set("S4 Stroke 0:ベタ 1:グラデ", 0, 0, 1);
+  pGraphicsEnableBase.set("Graphics Base Enable", true);
+  pGraphicsEnableOffset.set("Graphics Offset Enable", true);
+  pGraphicsEnableStroke.set("Graphics Stroke Enable", true);
+  pGraphicsOffsetSize.set("Graphics Offset Size", 200.0f, 0.0f, 600.0f);
+  pGraphicsOffsetScale.set("Graphics Offset Scale", 1.0f, 0.1f, 2.0f); // ★追加: 0.1(10%)〜2.0(200%)で調整
+  pGraphicsOffsetRound.set("Graphics Offset Round Mode", true);
+  pGraphicsStrokeWeight.set("Graphics Stroke Weight", 10.0f, 0.1f, 200.0f);
+  pGraphicsStrokeRound.set("Graphics Stroke Round Mode", true);
+  pGraphicsBaseMaterial.set("Graphics Base 0:ベタ 1:グラデ", 0, 0, 1);
+  pGraphicsStrokeMaterial.set("Graphics Stroke 0:ベタ 1:グラデ", 0, 0, 1);
 
   // ★追加: リスナー紐付け
-  pScene4EnableBase.addListener(this, &ofApp::onScene4EnableBaseChanged);
-  pScene4EnableOffset.addListener(this, &ofApp::onScene4EnableOffsetChanged);
-  pScene4EnableStroke.addListener(this, &ofApp::onScene4EnableStrokeChanged);
-  pScene4OffsetSize.addListener(this, &ofApp::onScene4OffsetSizeChanged);
-  pScene4OffsetScale.addListener(this, &ofApp::onScene4OffsetScaleChanged); // ★追加
-  pScene4OffsetRound.addListener(this, &ofApp::onScene4OffsetRoundChanged);
-  pScene4StrokeWeight.addListener(this, &ofApp::onScene4StrokeWeightChanged);
-  pScene4StrokeRound.addListener(this, &ofApp::onScene4StrokeRoundChanged);
-  pScene4BaseMaterial.addListener(this, &ofApp::onScene4BaseMaterialChanged);
-  pScene4StrokeMaterial.addListener(this, &ofApp::onScene4StrokeMaterialChanged);
+  pGraphicsEnableBase.addListener(this, &ofApp::onGraphicsEnableBaseChanged);
+  pGraphicsEnableOffset.addListener(this, &ofApp::onGraphicsEnableOffsetChanged);
+  pGraphicsEnableStroke.addListener(this, &ofApp::onGraphicsEnableStrokeChanged);
+  pGraphicsOffsetSize.addListener(this, &ofApp::onGraphicsOffsetSizeChanged);
+  pGraphicsOffsetScale.addListener(this, &ofApp::onGraphicsOffsetScaleChanged); // ★追加
+  pGraphicsOffsetRound.addListener(this, &ofApp::onGraphicsOffsetRoundChanged);
+  pGraphicsStrokeWeight.addListener(this, &ofApp::onGraphicsStrokeWeightChanged);
+  pGraphicsStrokeRound.addListener(this, &ofApp::onGraphicsStrokeRoundChanged);
+  pGraphicsBaseMaterial.addListener(this, &ofApp::onGraphicsBaseMaterialChanged);
+  pGraphicsStrokeMaterial.addListener(this, &ofApp::onGraphicsStrokeMaterialChanged);
 
 
   pRealtimeFps.set("Realtime FPS", 30.0f, 0.5f, 60.0f);
@@ -171,20 +171,20 @@ void ofApp::setupGuiParameters() {
   personSegmenter.confThreshold = pContourThreshold.get();
   vertexCount = pVertexCount.get();
   colorUpdateIntervalMs = static_cast<uint64_t>(pColorUpdateIntervalSec.get() * 1000.0f);
-  if (scene4) {
-    scene4->enableBase = pScene4EnableBase.get();
-    scene4->enableOffset = pScene4EnableOffset.get();
-    scene4->enableStroke = pScene4EnableStroke.get();
-    scene4->offsetSize = pScene4OffsetSize.get();
-    scene4->offsetScale = pScene4OffsetScale.get();
-    scene4->offsetJoinType = pScene4OffsetRound.get()
-        ? Scene4OffsetJoinType::Round : Scene4OffsetJoinType::Straight;
-    scene4->strokeWeight = pScene4StrokeWeight.get();
-    scene4->strokeJoinType = pScene4StrokeRound.get()
-        ? Scene4StrokeJoinType::Round : Scene4StrokeJoinType::Straight;
-    scene4->baseMaterialType = pScene4BaseMaterial.get() == 1
+  if (humanGraphicsScene) {
+    humanGraphicsScene->enableBase = pGraphicsEnableBase.get();
+    humanGraphicsScene->enableOffset = pGraphicsEnableOffset.get();
+    humanGraphicsScene->enableStroke = pGraphicsEnableStroke.get();
+    humanGraphicsScene->offsetSize = pGraphicsOffsetSize.get();
+    humanGraphicsScene->offsetScale = pGraphicsOffsetScale.get();
+    humanGraphicsScene->offsetJoinType = pGraphicsOffsetRound.get()
+        ? OffsetJoinType::Round : OffsetJoinType::Straight;
+    humanGraphicsScene->strokeWeight = pGraphicsStrokeWeight.get();
+    humanGraphicsScene->strokeJoinType = pGraphicsStrokeRound.get()
+        ? StrokeJoinType::Round : StrokeJoinType::Straight;
+    humanGraphicsScene->baseMaterialType = pGraphicsBaseMaterial.get() == 1
         ? gux::MaterialType::LinearGradient : gux::MaterialType::Solid;
-    scene4->outlineMaterialType = pScene4StrokeMaterial.get() == 1
+    humanGraphicsScene->outlineMaterialType = pGraphicsStrokeMaterial.get() == 1
         ? gux::MaterialType::LinearGradient : gux::MaterialType::Solid;
   }
   videoProcessor.processFps = static_cast<float>(pVideoFps.get());
@@ -204,16 +204,16 @@ void ofApp::setupGuiPersistence() {
   guiParams.add(pContourThreshold);
   guiParams.add(pVertexCount);
   guiParams.add(pColorUpdateIntervalSec);
-  guiParams.add(pScene4EnableBase);
-  guiParams.add(pScene4EnableOffset);
-  guiParams.add(pScene4EnableStroke);
-  guiParams.add(pScene4OffsetSize);
-  guiParams.add(pScene4OffsetScale);
-  guiParams.add(pScene4OffsetRound);
-  guiParams.add(pScene4StrokeWeight);
-  guiParams.add(pScene4StrokeRound);
-  guiParams.add(pScene4BaseMaterial);
-  guiParams.add(pScene4StrokeMaterial);
+  guiParams.add(pGraphicsEnableBase);
+  guiParams.add(pGraphicsEnableOffset);
+  guiParams.add(pGraphicsEnableStroke);
+  guiParams.add(pGraphicsOffsetSize);
+  guiParams.add(pGraphicsOffsetScale);
+  guiParams.add(pGraphicsOffsetRound);
+  guiParams.add(pGraphicsStrokeWeight);
+  guiParams.add(pGraphicsStrokeRound);
+  guiParams.add(pGraphicsBaseMaterial);
+  guiParams.add(pGraphicsStrokeMaterial);
   guiParams.add(pRealtimeFps);
   guiParams.add(pVideoFps);
 
@@ -227,16 +227,16 @@ void ofApp::setupGuiPersistence() {
   presetParams.add(pContourThreshold);
   presetParams.add(pVertexCount);
   presetParams.add(pColorUpdateIntervalSec);
-  presetParams.add(pScene4EnableBase);
-  presetParams.add(pScene4EnableOffset);
-  presetParams.add(pScene4EnableStroke);
-  presetParams.add(pScene4OffsetSize);
-  presetParams.add(pScene4OffsetScale);
-  presetParams.add(pScene4OffsetRound);
-  presetParams.add(pScene4StrokeWeight);
-  presetParams.add(pScene4StrokeRound);
-  presetParams.add(pScene4BaseMaterial);
-  presetParams.add(pScene4StrokeMaterial);
+  presetParams.add(pGraphicsEnableBase);
+  presetParams.add(pGraphicsEnableOffset);
+  presetParams.add(pGraphicsEnableStroke);
+  presetParams.add(pGraphicsOffsetSize);
+  presetParams.add(pGraphicsOffsetScale);
+  presetParams.add(pGraphicsOffsetRound);
+  presetParams.add(pGraphicsStrokeWeight);
+  presetParams.add(pGraphicsStrokeRound);
+  presetParams.add(pGraphicsBaseMaterial);
+  presetParams.add(pGraphicsStrokeMaterial);
   presetParams.add(pRealtimeFps);
   presetParams.add(pVideoFps);
 }
@@ -425,16 +425,16 @@ void ofApp::rebuildGuiPanel() {
   gui.add<float>(pColorUpdateIntervalSec);
 
 
-  gui.add(pScene4EnableBase);
-  gui.add(pScene4EnableOffset);
-  gui.add(pScene4EnableStroke);
-  gui.add<float>(pScene4OffsetSize);
-  gui.add<float>(pScene4OffsetScale);
-  gui.add(pScene4OffsetRound);
-  gui.add<float>(pScene4StrokeWeight);
-  gui.add(pScene4StrokeRound);
-  gui.add(pScene4BaseMaterial);
-  gui.add(pScene4StrokeMaterial);
+  gui.add(pGraphicsEnableBase);
+  gui.add(pGraphicsEnableOffset);
+  gui.add(pGraphicsEnableStroke);
+  gui.add<float>(pGraphicsOffsetSize);
+  gui.add<float>(pGraphicsOffsetScale);
+  gui.add(pGraphicsOffsetRound);
+  gui.add<float>(pGraphicsStrokeWeight);
+  gui.add(pGraphicsStrokeRound);
+  gui.add(pGraphicsBaseMaterial);
+  gui.add(pGraphicsStrokeMaterial);
 
   // 動画モード時のみUIを追加
   if (!realtimeMode) {
@@ -469,53 +469,53 @@ void ofApp::onColorUpdateIntervalChanged(float &value) {
 //--------------------------------------------------------------
 
 
-void ofApp::onScene4EnableBaseChanged(bool &value) {
-    if (scene4) scene4->enableBase = value;
+void ofApp::onGraphicsEnableBaseChanged(bool &value) {
+    if (humanGraphicsScene) humanGraphicsScene->enableBase = value;
     saveGuiSettings();
 }
-void ofApp::onScene4EnableOffsetChanged(bool &value) {
-    if (scene4) scene4->enableOffset = value;
+void ofApp::onGraphicsEnableOffsetChanged(bool &value) {
+    if (humanGraphicsScene) humanGraphicsScene->enableOffset = value;
     saveGuiSettings();
 }
-void ofApp::onScene4OffsetScaleChanged(float &value) {
-    if (scene4) scene4->offsetScale = value;
+void ofApp::onGraphicsOffsetScaleChanged(float &value) {
+    if (humanGraphicsScene) humanGraphicsScene->offsetScale = value;
     saveGuiSettings();
 }
-void ofApp::onScene4OffsetRoundChanged(bool &value) {
-    if (scene4) {
-        scene4->offsetJoinType = value ? Scene4OffsetJoinType::Round
-                                       : Scene4OffsetJoinType::Straight;
+void ofApp::onGraphicsOffsetRoundChanged(bool &value) {
+    if (humanGraphicsScene) {
+        humanGraphicsScene->offsetJoinType = value ? OffsetJoinType::Round
+                                       : OffsetJoinType::Straight;
     }
     saveGuiSettings();
 }
-void ofApp::onScene4EnableStrokeChanged(bool &value) {
-    if (scene4) scene4->enableStroke = value;
+void ofApp::onGraphicsEnableStrokeChanged(bool &value) {
+    if (humanGraphicsScene) humanGraphicsScene->enableStroke = value;
     saveGuiSettings();
 }
-void ofApp::onScene4OffsetSizeChanged(float &value) {
-    if (scene4) scene4->offsetSize = value;
+void ofApp::onGraphicsOffsetSizeChanged(float &value) {
+    if (humanGraphicsScene) humanGraphicsScene->offsetSize = value;
     saveGuiSettings();
 }
-void ofApp::onScene4StrokeWeightChanged(float &value) {
-    if (scene4) scene4->strokeWeight = value;
+void ofApp::onGraphicsStrokeWeightChanged(float &value) {
+    if (humanGraphicsScene) humanGraphicsScene->strokeWeight = value;
     saveGuiSettings();
 }
-void ofApp::onScene4StrokeRoundChanged(bool &value) {
-    if (scene4) {
-        scene4->strokeJoinType = value ? Scene4StrokeJoinType::Round : Scene4StrokeJoinType::Straight;
+void ofApp::onGraphicsStrokeRoundChanged(bool &value) {
+    if (humanGraphicsScene) {
+        humanGraphicsScene->strokeJoinType = value ? StrokeJoinType::Round : StrokeJoinType::Straight;
     }
     saveGuiSettings();
 }
-void ofApp::onScene4BaseMaterialChanged(int &value) {
-    if (scene4) {
-        scene4->baseMaterialType = value == 1
+void ofApp::onGraphicsBaseMaterialChanged(int &value) {
+    if (humanGraphicsScene) {
+        humanGraphicsScene->baseMaterialType = value == 1
             ? gux::MaterialType::LinearGradient : gux::MaterialType::Solid;
     }
     saveGuiSettings();
 }
-void ofApp::onScene4StrokeMaterialChanged(int &value) {
-    if (scene4) {
-        scene4->outlineMaterialType = value == 1
+void ofApp::onGraphicsStrokeMaterialChanged(int &value) {
+    if (humanGraphicsScene) {
+        humanGraphicsScene->outlineMaterialType = value == 1
             ? gux::MaterialType::LinearGradient : gux::MaterialType::Solid;
     }
     saveGuiSettings();
@@ -585,7 +585,7 @@ void ofApp::startImageSequenceExport() {
     pVideoStatusText = "Export is already running";
     return;
   }
-  if (realtimeMode || !videoProcessor.isLoaded() || !scene4) {
+  if (realtimeMode || !videoProcessor.isLoaded() || !humanGraphicsScene) {
     pVideoStatusText = "Export requires a loaded video in Video mode";
     return;
   }
@@ -622,7 +622,7 @@ void ofApp::startImageSequenceExport() {
 
   // Mainの描画用Sceneとは別インスタンスを使うため、書き出し中も
   // Main Windowのループ再生と色・輪郭の状態を維持できる。
-  exportScene = std::make_shared<Scene4>(*scene4);
+  exportScene = std::make_shared<HumanGraphicsScene>(*humanGraphicsScene);
 
   exportVideoPlayer.setLoopState(OF_LOOP_NONE);
   // AVFoundationでは停止中のfirstFrame()が新規フレームを通知しない場合が
@@ -1083,7 +1083,7 @@ void ofApp::keyPressed(int key) {
   }
 
   else if (key == '4') {
-    currentScene = scene4;
+    currentScene = humanGraphicsScene;
   }
   // ============================================
   // 全体設定のキー操作

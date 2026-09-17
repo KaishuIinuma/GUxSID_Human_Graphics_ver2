@@ -9,7 +9,7 @@ struct RenderContext {
   bool enableBase = true;
   bool enableStroke = true;
   float strokeWeight = 10.0f;
-  Scene4StrokeJoinType strokeJoinType = Scene4StrokeJoinType::Round;
+  StrokeJoinType strokeJoinType = StrokeJoinType::Round;
 };
 
 }  // namespace gux
