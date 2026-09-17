@@ -49,21 +49,28 @@ class MaterialAssignmentSystem {
     assignedIndices.reserve(objects.size());
     for (size_t i = 0; i < objects.size(); ++i) {
       if (colorDeck.empty()) refillColorDeck(paletteSize);
-      auto colorIt = std::find_if(
-          colorDeck.begin(), colorDeck.end(),
-          [&assignedIndices](size_t colorIndex) {
-            return std::find(assignedIndices.begin(), assignedIndices.end(),
-                             colorIndex) == assignedIndices.end();
-          });
-      if (colorIt == colorDeck.end()) {
-        refillColorDeck(paletteSize);
+      auto colorIt = colorDeck.begin();
+
+      // 同一画面内では、パレットを一巡するまで重複を避ける。
+      // オブジェクト数がパレット数を超えた後は重複を許可する。
+      if (assignedIndices.size() < paletteSize) {
         colorIt = std::find_if(
             colorDeck.begin(), colorDeck.end(),
             [&assignedIndices](size_t colorIndex) {
               return std::find(assignedIndices.begin(), assignedIndices.end(),
                                colorIndex) == assignedIndices.end();
             });
+        if (colorIt == colorDeck.end()) {
+          refillColorDeck(paletteSize);
+          colorIt = std::find_if(
+              colorDeck.begin(), colorDeck.end(),
+              [&assignedIndices](size_t colorIndex) {
+                return std::find(assignedIndices.begin(), assignedIndices.end(),
+                                 colorIndex) == assignedIndices.end();
+              });
+        }
       }
+
       const size_t primaryIndex = *colorIt;
       assignedIndices.push_back(primaryIndex);
       colorDeck.erase(colorIt);

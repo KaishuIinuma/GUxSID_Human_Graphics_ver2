@@ -32,7 +32,6 @@ void ofApp::setup() {
   if (!cameraDevices.empty()) {
       cam.setDeviceID(getDefaultCameraIndex());
   }
-  cam.setup(W, H);
 
   // メモリ領域を確保
   colorImg.allocate(W, H);
@@ -146,10 +145,15 @@ void ofApp::setupGuiParameters() {
   setupGuiPersistence();
   ofSerialize(defaultGuiSettings, guiParams);
   if (previousRunCrashed) {
+    logSavedGuiSettingsBeforeCrashReset();
     ofLogWarning("ofApp") << "前回の終了を確認できないため、GUIパラメーターを初期値に戻しました。";
   } else {
     loadGuiSettings();
   }
+
+  // 保存済みモードを先に確定し、Video起動時にカメラを開かないようにする。
+  // ofParameterのリスナーはこの後で登録するため、ここでは明示的に反映する。
+  realtimeMode = pRealtime.get();
 
   pCameraIndex.addListener(this, &ofApp::onCameraIndexChanged);
   pRealtime.addListener(this, &ofApp::onRealtimeChanged);
@@ -200,7 +204,6 @@ void ofApp::setupGuiParameters() {
     humanGraphicsScene->setSceneBehavior(pSceneBehaviorId.get());
   }
   videoProcessor.processFps = static_cast<float>(pVideoFps.get());
-  realtimeMode = pRealtime.get();
 
   rebuildGuiPanel();
   showGuiWindow();
@@ -271,6 +274,30 @@ void ofApp::loadGuiSettings() {
     isLoadingGuiSettings = true;
     ofDeserialize(settings, guiParams);
     isLoadingGuiSettings = false;
+  }
+}
+
+//--------------------------------------------------------------
+void ofApp::logSavedGuiSettingsBeforeCrashReset() const {
+  const auto settingsPath =
+      ofFilePath::join(settingsDirectoryPath(), kControlsFileName);
+  if (!ofFile(settingsPath, ofFile::Reference).exists()) {
+    ofLogWarning("ofApp")
+        << "クラッシュ復旧: 前回のGUI設定ファイルは見つかりませんでした: "
+        << settingsPath;
+    return;
+  }
+
+  try {
+    const ofJson savedSettings = ofLoadJson(settingsPath);
+    ofLogWarning("ofApp")
+        << "クラッシュ復旧: 初期値へ戻す前のGUI設定 (" << settingsPath
+        << "):\n"
+        << savedSettings.dump(2);
+  } catch (const std::exception& error) {
+    ofLogError("ofApp")
+        << "クラッシュ復旧: 前回のGUI設定を読み出せませんでした: "
+        << settingsPath << " (" << error.what() << ")";
   }
 }
 
@@ -600,6 +627,17 @@ void ofApp::onRealtimeChanged(bool &value) {
   realtimeMode = value;
   // モードを切り替えた直後は、次に届いたフレームをすぐ処理できるようにする。
   lastRealtimeProcessMs = 0;
+
+  if (realtimeMode) {
+    int cameraIndex = pCameraIndex.get();
+    onCameraIndexChanged(cameraIndex);
+  } else {
+    // VideoモードではCMIOのカメラ転送スレッドを残さない。
+    // AVFoundation動画再生との併存によるメモリ破壊を防ぐ。
+    cam.close();
+    ofLogNotice("ofApp") << "Videoモードへ移行したためカメラを閉じました。";
+  }
+
   rebuildGuiPanel();
 
   // ★追加: Realtimeモード（カメラ入力）に戻った時、
@@ -724,9 +762,27 @@ void ofApp::updateImageSequenceExport() {
     exportAwaitingFirstFrame = false;
   }
 
-  exportColorImg.setFromPixels(exportVideoPlayer.getPixels());
-  cv::Mat rgbMat(exportHeight, exportWidth, CV_8UC3,
-                 exportColorImg.getPixels().getData());
+  const ofPixels& framePixels = exportVideoPlayer.getPixels();
+  if (!framePixels.isAllocated()) return;
+
+  cv::Mat rgbMat;
+  const int channels = framePixels.getNumChannels();
+  if (channels == 4) {
+    cv::Mat rgbaMat(exportHeight, exportWidth, CV_8UC4,
+                    const_cast<unsigned char*>(framePixels.getData()));
+    cv::cvtColor(rgbaMat, rgbMat, cv::COLOR_RGBA2RGB);
+  } else if (channels == 3) {
+    rgbMat = cv::Mat(exportHeight, exportWidth, CV_8UC3,
+                     const_cast<unsigned char*>(framePixels.getData()));
+  } else if (channels == 1) {
+    cv::Mat grayMat(exportHeight, exportWidth, CV_8UC1,
+                    const_cast<unsigned char*>(framePixels.getData()));
+    cv::cvtColor(grayMat, rgbMat, cv::COLOR_GRAY2RGB);
+  } else {
+    pVideoStatusText = "Export failed: unsupported pixel format";
+    cancelImageSequenceExport();
+    return;
+  }
   const HumanContourData exportData = personSegmenter.detect(
       rgbMat, exportWidth, exportHeight);
 
@@ -978,7 +1034,13 @@ void ofApp::onCameraIndexChanged(int &index) {
     if (index >= 0 && index < cameraDevices.size()) {
         // カメラの名前表示を更新
         pCameraName = cameraDevices[index].deviceName;
-        
+
+        // Videoモードではカメラデバイスを開かない。
+        if (!realtimeMode) {
+            saveGuiSettings();
+            return;
+        }
+
         // 既存のカメラを閉じて、新しいIDで開き直す
         cam.close();
         cam.setDeviceID(index);

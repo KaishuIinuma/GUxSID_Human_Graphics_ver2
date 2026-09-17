@@ -259,6 +259,7 @@ public:
   // GUI設定の永続化と、Controls Windowの表示／再生成（Aキー）
   void setupGuiPersistence();
   void loadGuiSettings();
+  void logSavedGuiSettingsBeforeCrashReset() const;
   void saveGuiSettings() const;
   void resetGuiParametersToDefaults();
   void discoverPresetFiles();

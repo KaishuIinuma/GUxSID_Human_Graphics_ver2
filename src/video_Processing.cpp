@@ -1,5 +1,6 @@
 #include "video_Processing.h"
 #include <cmath>
+#include <opencv2/imgproc.hpp>
 
 //--------------------------------------------------------------
 void VideoProcessing::setup(PersonSegmenter *segmenter) {
@@ -104,9 +105,31 @@ void VideoProcessing::processCurrentFrame() {
   //   PersonSegmenter(YOLO11-seg)へのdetect()呼び出し一発に簡素化。
   //   人物ごとの輪郭・重心・外接矩形をまとめて返してくれる。
   // ============================================
-  colorImg.setFromPixels(videoPlayer.getPixels());
+  const ofPixels& framePixels = videoPlayer.getPixels();
+  if (!framePixels.isAllocated() ||
+      framePixels.getWidth() != videoWidth ||
+      framePixels.getHeight() != videoHeight) {
+    return;
+  }
 
-  cv::Mat rgbMat(videoHeight, videoWidth, CV_8UC3, colorImg.getPixels().getData());
+  cv::Mat rgbMat;
+  const int channels = framePixels.getNumChannels();
+  if (channels == 4) {
+    cv::Mat rgbaMat(videoHeight, videoWidth, CV_8UC4,
+                    const_cast<unsigned char*>(framePixels.getData()));
+    cv::cvtColor(rgbaMat, rgbMat, cv::COLOR_RGBA2RGB);
+  } else if (channels == 3) {
+    rgbMat = cv::Mat(videoHeight, videoWidth, CV_8UC3,
+                     const_cast<unsigned char*>(framePixels.getData()));
+  } else if (channels == 1) {
+    cv::Mat grayMat(videoHeight, videoWidth, CV_8UC1,
+                    const_cast<unsigned char*>(framePixels.getData()));
+    cv::cvtColor(grayMat, rgbMat, cv::COLOR_GRAY2RGB);
+  } else {
+    ofLogError("VideoProcessing")
+        << "未対応の動画ピクセル形式です: channels=" << channels;
+    return;
+  }
 
   humanData = segmenterPtr->detect(rgbMat, ofGetWidth(), ofGetHeight());
 }
