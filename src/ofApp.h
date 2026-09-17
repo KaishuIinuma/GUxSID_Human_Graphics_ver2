@@ -177,6 +177,10 @@ public:
   // 0: Solid / 1: Linear Gradient。BaseとOutlineは独立して選択できる。
   ofParameter<int> pGraphicsBaseMaterial;
   ofParameter<int> pGraphicsStrokeMaterial;
+  ofParameter<string> pRenderRecipeId;
+  ofParameter<string> pMergeEventId;
+  ofParameter<string> pSceneLayoutId;
+  ofParameter<string> pSceneBehaviorId;
 
   // GUIリスナー関数
   void onGraphicsEnableBaseChanged(bool &value);
@@ -189,6 +193,10 @@ public:
   void onGraphicsStrokeRoundChanged(bool &value);
   void onGraphicsBaseMaterialChanged(int &value);
   void onGraphicsStrokeMaterialChanged(int &value);
+  void onRenderRecipeIdChanged(string &value);
+  void onMergeEventIdChanged(string &value);
+  void onSceneLayoutIdChanged(string &value);
+  void onSceneBehaviorIdChanged(string &value);
 
   // ============================================
   // ★追加: Realtime / 動画モード関連のGUIパラメータ

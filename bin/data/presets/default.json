@@ -1,5 +1,9 @@
 {
   "ControlsSettings": {
+    "Recipe_ID": "standard_render",
+    "Event_ID": "standard_event",
+    "Layout_ID": "standard_layout",
+    "Behavior_ID": "standard_behavior",
     "Realtime": "1",
     "Flip_Horizontal": "0",
     "Person_Confidence": "0.6",

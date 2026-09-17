@@ -10,6 +10,7 @@ struct RenderContext {
   bool enableStroke = true;
   float strokeWeight = 10.0f;
   StrokeJoinType strokeJoinType = StrokeJoinType::Round;
+  ofColor backgroundColor = ofColor::white;
 };
 
 }  // namespace gux

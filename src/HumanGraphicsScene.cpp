@@ -18,8 +18,12 @@ void HumanGraphicsScene::setup() {
   sceneObjects.clear();
   materialAssignmentSystem.reset();
   renderRecipe = std::make_shared<gux::StandardRenderRecipe>();
+  mergeEvent = std::make_shared<gux::StandardMergeEvent>();
+  sceneLayout = std::make_shared<gux::StandardSceneLayout>();
+  sceneBehavior = std::make_shared<gux::StandardSceneBehavior>();
   hasDetectionSignature = false;
   hasPipelineSignature = false;
+  mergeActive = false;
 }
 
 void HumanGraphicsScene::update(const HumanContourData& humanData) {
@@ -34,11 +38,19 @@ void HumanGraphicsScene::update(const HumanContourData& humanData) {
   }
 
   const uint64_t currentPipelineSignature = pipelineSignature(humanData);
+  bool compositionUpdated = false;
+  bool mergeJustStarted = false;
   if (!hasPipelineSignature || currentPipelineSignature != lastPipelineSignature) {
     geometryObjects =
         geometryProcessor.process(trackedObjects, geometrySettings());
     sceneObjects =
         sceneComposer.compose(geometryObjects, compositionSettings());
+
+    const bool isMerged = sceneObjects.size() < geometryObjects.size();
+    mergeJustStarted = isMerged && !mergeActive;
+    mergeActive = isMerged;
+    compositionUpdated = true;
+
     lastPipelineSignature = currentPipelineSignature;
     hasPipelineSignature = true;
   }
@@ -46,11 +58,113 @@ void HumanGraphicsScene::update(const HumanContourData& humanData) {
   materialAssignmentSystem.update(
       sceneObjects, ofApp::colorPallate, ofApp::colorPaletteSize,
       ofApp::colorUpdateIntervalMs, baseMaterialType, outlineMaterialType);
+
+  if (compositionUpdated && sceneLayout) {
+    gux::LayoutContext layoutContext;
+    layoutContext.canvasWidth = static_cast<float>(ofGetWidth());
+    layoutContext.canvasHeight = static_cast<float>(ofGetHeight());
+    sceneLayout->apply(sceneObjects, layoutContext);
+  }
+
+  // EventはComposition・Material・Layoutが完了したSceneObjectへ適用する。
+  if (compositionUpdated && mergeActive && mergeEvent) {
+    gux::MergeEventContext eventContext;
+    eventContext.sourceObjectCount = geometryObjects.size();
+    eventContext.composedObjectCount = sceneObjects.size();
+    eventContext.justStarted = mergeJustStarted;
+    mergeEvent->apply(sceneObjects, eventContext);
+  }
+
+  if (sceneBehavior) {
+    gux::BehaviorContext behaviorContext;
+    behaviorContext.elapsedSeconds = ofGetElapsedTimef();
+    behaviorContext.deltaSeconds = ofGetLastFrameTime();
+    behaviorContext.compositionUpdated = compositionUpdated;
+    sceneBehavior->update(sceneObjects, behaviorContext);
+  }
 }
 
 void HumanGraphicsScene::draw() {
   ofBackground(ofApp::background_color);
   if (renderRecipe) renderRecipe->draw(sceneObjects, renderContext());
+}
+
+void HumanGraphicsScene::setRenderRecipe(const std::string& recipeId) {
+  if (recipeId == gux::MixRenderRecipe::RecipeId) {
+    renderRecipe = std::make_shared<gux::MixRenderRecipe>();
+    return;
+  }
+  if (recipeId == gux::RecursiveStrokeRenderRecipe::RecipeId) {
+    renderRecipe = std::make_shared<gux::RecursiveStrokeRenderRecipe>();
+    return;
+  }
+  if (recipeId == gux::FloatingBridgeRenderRecipe::RecipeId) {
+    renderRecipe = std::make_shared<gux::FloatingBridgeRenderRecipe>();
+    return;
+  }
+
+  if (recipeId != gux::StandardRenderRecipe::RecipeId) {
+    ofLogWarning("HumanGraphicsScene")
+        << "Unknown Recipe ID: " << recipeId
+        << ". Falling back to " << gux::StandardRenderRecipe::RecipeId;
+  }
+  renderRecipe = std::make_shared<gux::StandardRenderRecipe>();
+}
+
+std::string_view HumanGraphicsScene::renderRecipeId() const {
+  return renderRecipe ? renderRecipe->id()
+                      : gux::StandardRenderRecipe::RecipeId;
+}
+
+void HumanGraphicsScene::setMergeEvent(const std::string& eventId) {
+  if (eventId != gux::StandardMergeEvent::EventId) {
+    ofLogWarning("HumanGraphicsScene")
+        << "Unknown Merge Event ID: " << eventId
+        << ". Falling back to " << gux::StandardMergeEvent::EventId;
+  }
+  mergeEvent = std::make_shared<gux::StandardMergeEvent>();
+  hasPipelineSignature = false;
+}
+
+std::string_view HumanGraphicsScene::mergeEventId() const {
+  return mergeEvent ? mergeEvent->id() : gux::StandardMergeEvent::EventId;
+}
+
+void HumanGraphicsScene::setSceneLayout(const std::string& layoutId) {
+  if (layoutId == gux::RecursiveSplitLayout::LayoutId) {
+    sceneLayout = std::make_shared<gux::RecursiveSplitLayout>();
+  } else {
+    if (layoutId != gux::StandardSceneLayout::LayoutId) {
+      ofLogWarning("HumanGraphicsScene")
+          << "Unknown Layout ID: " << layoutId << ". Falling back to "
+          << gux::StandardSceneLayout::LayoutId;
+    }
+    sceneLayout = std::make_shared<gux::StandardSceneLayout>();
+  }
+  hasPipelineSignature = false;
+}
+
+std::string_view HumanGraphicsScene::sceneLayoutId() const {
+  return sceneLayout ? sceneLayout->id() : gux::StandardSceneLayout::LayoutId;
+}
+
+void HumanGraphicsScene::setSceneBehavior(const std::string& behaviorId) {
+  if (behaviorId == gux::FloatingSceneBehavior::BehaviorId) {
+    sceneBehavior = std::make_shared<gux::FloatingSceneBehavior>();
+  } else {
+    if (behaviorId != gux::StandardSceneBehavior::BehaviorId) {
+      ofLogWarning("HumanGraphicsScene")
+          << "Unknown Behavior ID: " << behaviorId << ". Falling back to "
+          << gux::StandardSceneBehavior::BehaviorId;
+    }
+    sceneBehavior = std::make_shared<gux::StandardSceneBehavior>();
+  }
+  sceneBehavior->reset();
+}
+
+std::string_view HumanGraphicsScene::sceneBehaviorId() const {
+  return sceneBehavior ? sceneBehavior->id()
+                       : gux::StandardSceneBehavior::BehaviorId;
 }
 
 uint64_t HumanGraphicsScene::detectionSignature(
@@ -135,5 +249,6 @@ gux::RenderContext HumanGraphicsScene::renderContext() const {
   context.enableStroke = enableStroke;
   context.strokeWeight = strokeWeight;
   context.strokeJoinType = strokeJoinType;
+  context.backgroundColor = ofColor(ofApp::background_color);
   return context;
 }

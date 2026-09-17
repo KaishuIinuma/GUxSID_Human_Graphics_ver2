@@ -2,10 +2,18 @@
 
 #include "BaseScene.h"
 #include "core/VisualTypes.h"
+#include "event/StandardMergeEvent.h"
 #include "geometry/GeometryProcessor.h"
 #include "material/MaterialAssignmentSystem.h"
+#include "render/MixRenderRecipe.h"
+#include "render/FloatingBridgeRenderRecipe.h"
+#include "render/RecursiveStrokeRenderRecipe.h"
 #include "render/StandardRenderRecipe.h"
+#include "scene/FloatingSceneBehavior.h"
+#include "scene/RecursiveSplitLayout.h"
 #include "scene/SceneComposer.h"
+#include "scene/StandardSceneBehavior.h"
+#include "scene/StandardSceneLayout.h"
 #include "tracking/ObjectTracker.h"
 
 #include <memory>
@@ -17,6 +25,14 @@ class HumanGraphicsScene : public BaseScene {
   void setup() override;
   void update(const HumanContourData& humanData) override;
   void draw() override;
+  void setRenderRecipe(const std::string& recipeId);
+  std::string_view renderRecipeId() const;
+  void setMergeEvent(const std::string& eventId);
+  std::string_view mergeEventId() const;
+  void setSceneLayout(const std::string& layoutId);
+  std::string_view sceneLayoutId() const;
+  void setSceneBehavior(const std::string& behaviorId);
+  std::string_view sceneBehaviorId() const;
 
   bool enableBase = true;
   bool enableOffset = true;
@@ -37,6 +53,9 @@ class HumanGraphicsScene : public BaseScene {
   // 動画書き出しではHumanGraphicsScene全体をコピーするため、Recipeは共有所有にする。
   // Recipe自体は状態を持たず、通常描画と書き出し描画で安全に共有できる。
   std::shared_ptr<gux::RenderRecipe> renderRecipe;
+  std::shared_ptr<gux::MergeEvent> mergeEvent;
+  std::shared_ptr<gux::SceneLayout> sceneLayout;
+  std::shared_ptr<gux::SceneBehavior> sceneBehavior;
 
   std::vector<gux::TrackedObject> trackedObjects;
   std::vector<gux::GeometryObject> geometryObjects;
@@ -46,6 +65,7 @@ class HumanGraphicsScene : public BaseScene {
   uint64_t lastPipelineSignature = 0;
   bool hasDetectionSignature = false;
   bool hasPipelineSignature = false;
+  bool mergeActive = false;
 
   uint64_t detectionSignature(const HumanContourData& humanData) const;
   uint64_t pipelineSignature(const HumanContourData& humanData) const;

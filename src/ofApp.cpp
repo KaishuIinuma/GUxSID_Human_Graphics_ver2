@@ -113,6 +113,10 @@ void ofApp::setupGuiParameters() {
   pGraphicsStrokeRound.set("Graphics Stroke Round Mode", true);
   pGraphicsBaseMaterial.set("Graphics Base 0:ベタ 1:グラデ", 0, 0, 1);
   pGraphicsStrokeMaterial.set("Graphics Stroke 0:ベタ 1:グラデ", 0, 0, 1);
+  pRenderRecipeId.set("Recipe ID", "standard_render");
+  pMergeEventId.set("Event ID", "standard_event");
+  pSceneLayoutId.set("Layout ID", "standard_layout");
+  pSceneBehaviorId.set("Behavior ID", "standard_behavior");
 
   // ★追加: リスナー紐付け
   pGraphicsEnableBase.addListener(this, &ofApp::onGraphicsEnableBaseChanged);
@@ -125,6 +129,10 @@ void ofApp::setupGuiParameters() {
   pGraphicsStrokeRound.addListener(this, &ofApp::onGraphicsStrokeRoundChanged);
   pGraphicsBaseMaterial.addListener(this, &ofApp::onGraphicsBaseMaterialChanged);
   pGraphicsStrokeMaterial.addListener(this, &ofApp::onGraphicsStrokeMaterialChanged);
+  pRenderRecipeId.addListener(this, &ofApp::onRenderRecipeIdChanged);
+  pMergeEventId.addListener(this, &ofApp::onMergeEventIdChanged);
+  pSceneLayoutId.addListener(this, &ofApp::onSceneLayoutIdChanged);
+  pSceneBehaviorId.addListener(this, &ofApp::onSceneBehaviorIdChanged);
 
 
   pRealtimeFps.set("Realtime FPS", 30.0f, 0.5f, 60.0f);
@@ -186,6 +194,10 @@ void ofApp::setupGuiParameters() {
         ? gux::MaterialType::LinearGradient : gux::MaterialType::Solid;
     humanGraphicsScene->outlineMaterialType = pGraphicsStrokeMaterial.get() == 1
         ? gux::MaterialType::LinearGradient : gux::MaterialType::Solid;
+    humanGraphicsScene->setRenderRecipe(pRenderRecipeId.get());
+    humanGraphicsScene->setMergeEvent(pMergeEventId.get());
+    humanGraphicsScene->setSceneLayout(pSceneLayoutId.get());
+    humanGraphicsScene->setSceneBehavior(pSceneBehaviorId.get());
   }
   videoProcessor.processFps = static_cast<float>(pVideoFps.get());
   realtimeMode = pRealtime.get();
@@ -214,6 +226,10 @@ void ofApp::setupGuiPersistence() {
   guiParams.add(pGraphicsStrokeRound);
   guiParams.add(pGraphicsBaseMaterial);
   guiParams.add(pGraphicsStrokeMaterial);
+  guiParams.add(pRenderRecipeId);
+  guiParams.add(pMergeEventId);
+  guiParams.add(pSceneLayoutId);
+  guiParams.add(pSceneBehaviorId);
   guiParams.add(pRealtimeFps);
   guiParams.add(pVideoFps);
 
@@ -237,6 +253,10 @@ void ofApp::setupGuiPersistence() {
   presetParams.add(pGraphicsStrokeRound);
   presetParams.add(pGraphicsBaseMaterial);
   presetParams.add(pGraphicsStrokeMaterial);
+  presetParams.add(pRenderRecipeId);
+  presetParams.add(pMergeEventId);
+  presetParams.add(pSceneLayoutId);
+  presetParams.add(pSceneBehaviorId);
   presetParams.add(pRealtimeFps);
   presetParams.add(pVideoFps);
 }
@@ -435,6 +455,10 @@ void ofApp::rebuildGuiPanel() {
   gui.add(pGraphicsStrokeRound);
   gui.add(pGraphicsBaseMaterial);
   gui.add(pGraphicsStrokeMaterial);
+  gui.add(pRenderRecipeId);
+  gui.add(pMergeEventId);
+  gui.add(pSceneLayoutId);
+  gui.add(pSceneBehaviorId);
 
   // 動画モード時のみUIを追加
   if (!realtimeMode) {
@@ -517,6 +541,54 @@ void ofApp::onGraphicsStrokeMaterialChanged(int &value) {
     if (humanGraphicsScene) {
         humanGraphicsScene->outlineMaterialType = value == 1
             ? gux::MaterialType::LinearGradient : gux::MaterialType::Solid;
+    }
+    saveGuiSettings();
+}
+
+void ofApp::onRenderRecipeIdChanged(string &value) {
+    if (humanGraphicsScene) {
+        humanGraphicsScene->setRenderRecipe(value);
+        const std::string activeId(humanGraphicsScene->renderRecipeId());
+        if (activeId != value) {
+            ofLogWarning("ofApp") << "Unknown Recipe ID: " << value
+                                  << ". Active Recipe: " << activeId;
+        }
+    }
+    saveGuiSettings();
+}
+
+void ofApp::onMergeEventIdChanged(string &value) {
+    if (humanGraphicsScene) {
+        humanGraphicsScene->setMergeEvent(value);
+        const std::string activeId(humanGraphicsScene->mergeEventId());
+        if (activeId != value) {
+            ofLogWarning("ofApp") << "Unknown Event ID: " << value
+                                  << ". Active Event: " << activeId;
+        }
+    }
+    saveGuiSettings();
+}
+
+void ofApp::onSceneLayoutIdChanged(string &value) {
+    if (humanGraphicsScene) {
+        humanGraphicsScene->setSceneLayout(value);
+        const std::string activeId(humanGraphicsScene->sceneLayoutId());
+        if (activeId != value) {
+            ofLogWarning("ofApp") << "Unknown Layout ID: " << value
+                                  << ". Active Layout: " << activeId;
+        }
+    }
+    saveGuiSettings();
+}
+
+void ofApp::onSceneBehaviorIdChanged(string &value) {
+    if (humanGraphicsScene) {
+        humanGraphicsScene->setSceneBehavior(value);
+        const std::string activeId(humanGraphicsScene->sceneBehaviorId());
+        if (activeId != value) {
+            ofLogWarning("ofApp") << "Unknown Behavior ID: " << value
+                                  << ". Active Behavior: " << activeId;
+        }
     }
     saveGuiSettings();
 }
@@ -623,6 +695,9 @@ void ofApp::startImageSequenceExport() {
   // Mainの描画用Sceneとは別インスタンスを使うため、書き出し中も
   // Main Windowのループ再生と色・輪郭の状態を維持できる。
   exportScene = std::make_shared<HumanGraphicsScene>(*humanGraphicsScene);
+  // 浮遊Behaviorは時系列状態を持つため、Main側とは独立した状態で書き出す。
+  exportScene->setSceneBehavior(
+      std::string(humanGraphicsScene->sceneBehaviorId()));
 
   exportVideoPlayer.setLoopState(OF_LOOP_NONE);
   // AVFoundationでは停止中のfirstFrame()が新規フレームを通知しない場合が

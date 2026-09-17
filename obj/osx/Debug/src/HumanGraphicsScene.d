@@ -582,15 +582,22 @@ obj/osx/Debug/src/HumanGraphicsScene.o: \
   /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/src/ofxCvContourFinder.h \
   /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/src/ofxCvHaarFinder.h \
   src/core/HumanContourData.h src/core/VisualTypes.h \
-  src/geometry/GeometryProcessor.h src/geometry/GeometryObject.h \
-  src/tracking/TrackedObject.h src/geometry/OffsetProcessor.h \
+  src/event/StandardMergeEvent.h src/event/MergeEvent.h \
+  src/scene/SceneObject.h src/geometry/GeometryObject.h \
+  src/tracking/TrackedObject.h src/scene/AppearanceComponent.h \
+  src/geometry/GeometryProcessor.h src/geometry/OffsetProcessor.h \
   src/geometry/VertexRemapper.h src/material/MaterialAssignmentSystem.h \
-  src/scene/SceneObject.h src/scene/AppearanceComponent.h \
-  src/render/StandardRenderRecipe.h src/render/BasePass.h \
+  src/render/MixRenderRecipe.h src/render/BasePass.h \
   src/render/RenderPass.h src/render/RenderContext.h \
   src/material/MaterialPainter.h src/render/ShapePainter.h \
   src/render/RenderRecipe.h src/render/StrokePass.h \
-  src/scene/SceneComposer.h src/tracking/ObjectTracker.h src/ofApp.h \
+  src/render/FloatingBridgeRenderRecipe.h \
+  src/render/RecursiveStrokeRenderRecipe.h \
+  src/render/StandardRenderRecipe.h src/scene/FloatingSceneBehavior.h \
+  src/scene/SceneBehavior.h src/scene/RecursiveSplitLayout.h \
+  src/scene/SceneLayout.h src/scene/SceneComposer.h \
+  src/scene/StandardSceneBehavior.h src/scene/StandardSceneLayout.h \
+  src/tracking/ObjectTracker.h src/ofApp.h \
   /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxGui/src/ofxGui.h \
   /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxGui/src/ofxToggle.h \
   /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxGui/src/ofxBaseGui.h \
@@ -1189,15 +1196,17 @@ src/BaseScene.h:
 /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/src/ofxCvHaarFinder.h:
 src/core/HumanContourData.h:
 src/core/VisualTypes.h:
-src/geometry/GeometryProcessor.h:
+src/event/StandardMergeEvent.h:
+src/event/MergeEvent.h:
+src/scene/SceneObject.h:
 src/geometry/GeometryObject.h:
 src/tracking/TrackedObject.h:
+src/scene/AppearanceComponent.h:
+src/geometry/GeometryProcessor.h:
 src/geometry/OffsetProcessor.h:
 src/geometry/VertexRemapper.h:
 src/material/MaterialAssignmentSystem.h:
-src/scene/SceneObject.h:
-src/scene/AppearanceComponent.h:
-src/render/StandardRenderRecipe.h:
+src/render/MixRenderRecipe.h:
 src/render/BasePass.h:
 src/render/RenderPass.h:
 src/render/RenderContext.h:
@@ -1205,7 +1214,16 @@ src/material/MaterialPainter.h:
 src/render/ShapePainter.h:
 src/render/RenderRecipe.h:
 src/render/StrokePass.h:
+src/render/FloatingBridgeRenderRecipe.h:
+src/render/RecursiveStrokeRenderRecipe.h:
+src/render/StandardRenderRecipe.h:
+src/scene/FloatingSceneBehavior.h:
+src/scene/SceneBehavior.h:
+src/scene/RecursiveSplitLayout.h:
+src/scene/SceneLayout.h:
 src/scene/SceneComposer.h:
+src/scene/StandardSceneBehavior.h:
+src/scene/StandardSceneLayout.h:
 src/tracking/ObjectTracker.h:
 src/ofApp.h:
 /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxGui/src/ofxGui.h:
