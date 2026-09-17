@@ -18,6 +18,7 @@ enum class MergeMode {
 };
 
 struct CompositionSettings {
+  bool enableMerge = true;
   bool enableBase = true;
   bool enableOffset = true;
   bool enableStroke = true;
@@ -335,7 +336,7 @@ class SceneComposer {
   static std::vector<ofPolyline> mergeContours(
       const std::vector<ofPolyline>& targetPolygons,
       const CompositionSettings& settings) {
-    if (targetPolygons.size() < 2 ||
+    if (!settings.enableMerge || targetPolygons.size() < 2 ||
         (!settings.enableBase && !settings.enableStroke)) {
       return targetPolygons;
     }

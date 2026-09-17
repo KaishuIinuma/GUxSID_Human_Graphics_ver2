@@ -49,9 +49,12 @@ class RecursiveSplitLayout final : public SceneLayout {
     const float scale = std::min(availableWidth / box.width,
                                  availableHeight / box.height);
     object.transform.scale = glm::vec2(scale);
-    object.transform.position =
-        glm::vec2(cell.x + cell.width * 0.5f,
-                  cell.y + cell.height * 0.5f) - object.pivot;
+    const glm::vec2 cellCenter(cell.x + cell.width * 0.5f,
+                               cell.y + cell.height * 0.5f);
+    const glm::vec2 boxCenter(box.x + box.width * 0.5f,
+                              box.y + box.height * 0.5f);
+    object.transform.position = cellCenter - object.pivot -
+                                (boxCenter - object.pivot) * scale;
   }
 
   static void assign(std::vector<SceneObject>& objects, size_t begin,

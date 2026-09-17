@@ -5,6 +5,7 @@
 #include "render/ShapePainter.h"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 
 namespace gux {

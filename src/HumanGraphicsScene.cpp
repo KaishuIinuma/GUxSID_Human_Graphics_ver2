@@ -221,6 +221,10 @@ gux::GeometrySettings HumanGraphicsScene::geometrySettings() const {
 
 gux::CompositionSettings HumanGraphicsScene::compositionSettings() const {
   gux::CompositionSettings settings;
+  // 再配置とペア接続では検知順・個体数を保つ必要があるため、事前結合しない。
+  settings.enableMerge =
+      sceneLayoutId() == gux::StandardSceneLayout::LayoutId &&
+      sceneBehaviorId() == gux::StandardSceneBehavior::BehaviorId;
   settings.enableBase = enableBase;
   settings.enableOffset = enableOffset;
   settings.enableStroke = enableStroke;
