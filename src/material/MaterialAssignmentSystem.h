@@ -15,19 +15,27 @@ class MaterialAssignmentSystem {
               MaterialType baseMaterialType,
               MaterialType outlineMaterialType) {
     const uint64_t now = ofGetElapsedTimeMillis();
-    std::vector<ObjectId> objectIds;
-    objectIds.reserve(objects.size());
-    for (const auto& object : objects) objectIds.push_back(object.id);
-
-    const bool objectSetChanged = objectIds != lastObjectIds;
+    const bool objectCountChanged =
+        assignedAppearances.size() != objects.size();
     const bool materialTypeChanged =
         baseMaterialType != lastBaseMaterialType ||
         outlineMaterialType != lastOutlineMaterialType;
     const bool updateDue = now >= nextUpdateMs;
-    if (!objectSetChanged && !materialTypeChanged && !updateDue) return;
+    const bool shouldReassign =
+        objectCountChanged || materialTypeChanged || updateDue;
+
+    // SceneObjectは輪郭更新のたびに再生成されるため、再抽選しないフレームでも
+    // 前回のAppearanceを戻す。IDの揺れでは色を更新せず、従来どおり
+    // 人数変化または指定間隔の到達時だけ新しい色を割り当てる。
+    if (!shouldReassign) {
+      for (size_t i = 0; i < objects.size(); ++i) {
+        objects[i].appearance = assignedAppearances[i];
+      }
+      return;
+    }
 
     if (paletteSize == 0) {
-      lastObjectIds = std::move(objectIds);
+      assignedAppearances.clear();
       nextUpdateMs = now + updateIntervalMs;
       return;
     }
@@ -36,6 +44,7 @@ class MaterialAssignmentSystem {
       colorDeckPaletteSize = paletteSize;
     }
 
+    assignedAppearances.resize(objects.size());
     std::vector<size_t> assignedIndices;
     assignedIndices.reserve(objects.size());
     for (size_t i = 0; i < objects.size(); ++i) {
@@ -66,9 +75,9 @@ class MaterialAssignmentSystem {
                                  palette[secondaryIndex], {0.0f, 1.0f}};
       appearance.outlineMaterial = {outlineMaterialType, palette[primaryIndex],
                                     palette[secondaryIndex], {0.0f, 1.0f}};
+      assignedAppearances[i] = appearance;
     }
 
-    lastObjectIds = std::move(objectIds);
     lastBaseMaterialType = baseMaterialType;
     lastOutlineMaterialType = outlineMaterialType;
     nextUpdateMs = now + updateIntervalMs;
@@ -76,7 +85,7 @@ class MaterialAssignmentSystem {
 
   void reset() {
     colorDeck.clear();
-    lastObjectIds.clear();
+    assignedAppearances.clear();
     nextUpdateMs = 0;
     colorDeckPaletteSize = 0;
   }
@@ -92,7 +101,7 @@ class MaterialAssignmentSystem {
   }
 
   std::vector<size_t> colorDeck;
-  std::vector<ObjectId> lastObjectIds;
+  std::vector<AppearanceComponent> assignedAppearances;
   uint64_t nextUpdateMs = 0;
   size_t colorDeckPaletteSize = 0;
   MaterialType lastBaseMaterialType = MaterialType::Solid;
