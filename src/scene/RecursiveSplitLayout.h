@@ -3,6 +3,8 @@
 #include "scene/SceneLayout.h"
 
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <limits>
 
 namespace gux {
@@ -57,6 +59,29 @@ class RecursiveSplitLayout final : public SceneLayout {
                                 (boxCenter - object.pivot) * scale;
   }
 
+  static std::uint64_t splitSeed(const std::vector<SceneObject>& objects,
+                                 size_t begin, size_t end) {
+    std::uint64_t seed = objects[begin].id;
+    seed ^= objects[end - 1].id + 0x9e3779b97f4a7c15ULL + (seed << 6) +
+            (seed >> 2);
+    seed ^= static_cast<std::uint64_t>(end - begin) *
+            0xbf58476d1ce4e5b9ULL;
+    seed ^= seed >> 30;
+    seed *= 0xbf58476d1ce4e5b9ULL;
+    seed ^= seed >> 27;
+    seed *= 0x94d049bb133111ebULL;
+    return seed ^ (seed >> 31);
+  }
+
+  static float goldenSplitRatio(std::uint64_t seed) {
+    constexpr float goldenLarge = 0.61803398875f;
+    constexpr float maxJitter = 0.035f;
+    const float unit = static_cast<float>((seed >> 1) & 0xffffULL) /
+                       static_cast<float>(0xffffULL);
+    const float largeRatio = goldenLarge + (unit * 2.0f - 1.0f) * maxJitter;
+    return (seed & 1ULL) == 0 ? largeRatio : 1.0f - largeRatio;
+  }
+
   static void assign(std::vector<SceneObject>& objects, size_t begin,
                      size_t end, const ofRectangle& cell) {
     const size_t count = end - begin;
@@ -65,10 +90,13 @@ class RecursiveSplitLayout final : public SceneLayout {
       return;
     }
 
-    const size_t firstCount = count / 2;
+    // 黄金比を芯に少しだけ揺らし、どちら側を大きくするかも変える。
+    // Object ID由来にすることで、毎フレーム位置がちらつくランダムさは避ける。
+    const float ratio = goldenSplitRatio(splitSeed(objects, begin, end));
+    const size_t firstCount = std::clamp(
+        static_cast<size_t>(std::lround(static_cast<float>(count) * ratio)),
+        size_t{1}, count - 1);
     const size_t middle = begin + firstCount;
-    const float ratio = static_cast<float>(firstCount) /
-                        static_cast<float>(count);
     constexpr float gap = 12.0f;
     if (cell.width >= cell.height) {
       const float split = cell.width * ratio;
