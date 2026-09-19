@@ -85,7 +85,11 @@ void HumanGraphicsScene::update(const HumanContourData& humanData) {
 }
 
 void HumanGraphicsScene::draw() {
-  ofBackground(ofApp::background_color);
+  draw(true);
+}
+
+void HumanGraphicsScene::draw(bool drawBackground) {
+  if (drawBackground) ofBackground(ofApp::background_color);
   if (renderRecipe) renderRecipe->draw(sceneObjects, renderContext());
 }
 

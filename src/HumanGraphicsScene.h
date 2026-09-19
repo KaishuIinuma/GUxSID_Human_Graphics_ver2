@@ -23,6 +23,7 @@ class HumanGraphicsScene : public BaseScene {
   void setup() override;
   void update(const HumanContourData& humanData) override;
   void draw() override;
+  void draw(bool drawBackground);
   void setRenderRecipe(const std::string& recipeId);
   std::string_view renderRecipeId() const;
   void setMergeEvent(const std::string& eventId);

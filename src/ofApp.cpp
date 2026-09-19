@@ -1,4 +1,5 @@
 #include "ofApp.h"
+#include "CameraAuthorization.h"
 #include <GLFW/glfw3.h> // guiWindow/mainWindowの表示切り替え・リサイズ用
 #include <algorithm>
 #include <iomanip>
@@ -13,11 +14,31 @@ const std::string kRunningMarkerFileName = "running.marker";
 std::string settingsDirectoryPath() {
   return ofFilePath::join(ofFilePath::getUserHomeDir(), kSettingsDirectoryName);
 }
+
+void configureBundledDataPath() {
+#ifdef TARGET_OSX
+  const of::filesystem::path executablePath =
+      ofFilePath::getCurrentExePathFS();
+  const of::filesystem::path bundledDataPath =
+      executablePath.parent_path().parent_path() / "Resources" / "data";
+
+  if (of::filesystem::is_directory(bundledDataPath)) {
+    ofSetDataPathRoot(bundledDataPath);
+    ofLogNotice("DataPath")
+        << "Using bundled data directory: "
+        << ofPathToString(bundledDataPath);
+  }
+#endif
+}
 } // namespace
 
 //--------------------------------------------------------------
 void ofApp::setup() {
   ofSetFrameRate(60);
+
+  // 配布.appでは、モデル・フォント・プリセットを
+  // Contents/Resources/dataから読む。開発ビルドでは従来のbin/dataを使う。
+  configureBundledDataPath();
 
   // 起動直後にマーカーを作成する。初期化途中のクラッシュも次回起動で検知する。
   beginRunSession();
@@ -25,14 +46,21 @@ void ofApp::setup() {
   // ============================================
   // ★追加/修正: カメラデバイスの取得と初期化
   // ============================================
-  cameraDevices = cam.listDevices();
-  for(size_t i = 0; i < cameraDevices.size(); i++) {
+  if (ensureCameraAuthorization()) {
+    cameraDevices = cam.listDevices();
+    for (size_t i = 0; i < cameraDevices.size(); ++i) {
       ofLogNotice() << "Camera " << i << ": " << cameraDevices[i].deviceName;
-  }
-  
-  // 通常起動時も、復旧後も内蔵カメラを優先する。
-  if (!cameraDevices.empty()) {
+    }
+
+    // 通常起動時も、復旧後も内蔵カメラを優先する。
+    if (!cameraDevices.empty()) {
       cam.setDeviceID(getDefaultCameraIndex());
+    } else {
+      ofLogError("ofApp") << "カメラへのアクセスは許可されていますが、利用可能なカメラが見つかりません。";
+    }
+  } else {
+    ofLogError("ofApp")
+        << "カメラへのアクセスが許可されていません。システム設定 > プライバシーとセキュリティ > カメラで、このアプリを許可してください。";
   }
 
   // メモリ領域を確保
@@ -76,7 +104,14 @@ void ofApp::setup() {
 // 1. setupGuiParameters() をスッキリさせます
 void ofApp::setupGuiParameters() {
   // フォントと実際の操作領域を拡大する（描画だけの拡大はしない）。
-  ofxBaseGui::loadFont("mono.ttf", 18, true, true, 72);
+  const std::string guiFontPath = ofToDataPath("mono.ttf", true);
+  if (ofFile(guiFontPath).exists()) {
+    ofxBaseGui::loadFont(guiFontPath, 18, true, true, 72);
+  } else {
+    ofLogWarning("ofApp") << "GUIフォントが見つからないため、ビットマップフォントを使用します: "
+                          << guiFontPath;
+    ofxBaseGui::setUseTTF(false);
+  }
   ofxBaseGui::setDefaultWidth(controlWindowWidth - 40);
   ofxBaseGui::setDefaultHeight(30);
   ofxBaseGui::setDefaultTextPadding(8);
@@ -122,6 +157,7 @@ void ofApp::setupGuiParameters() {
   pMergeEventId.set("Event ID", "standard_event");
   pSceneLayoutId.set("Layout ID", "standard_layout");
   pSceneBehaviorId.set("Behavior ID", "standard_behavior");
+  pExportAlpha.set("alpha", false);
 
   // ★追加: リスナー紐付け
   pGraphicsEnableBase.addListener(this, &ofApp::onGraphicsEnableBaseChanged);
@@ -139,9 +175,6 @@ void ofApp::setupGuiParameters() {
   pSceneLayoutId.addListener(this, &ofApp::onSceneLayoutIdChanged);
   pSceneBehaviorId.addListener(this, &ofApp::onSceneBehaviorIdChanged);
 
-
-  pRealtimeFps.set("Realtime FPS", 30.0f, 0.5f, 60.0f);
-  pVideoFps.set("Video FPS", 30, 1, 60);
   pVideoStatusText.set("Video Status", "Realtimeをオフにすると、このウィンドウに動画ファイルをドロップできます");
   pCrashStatusText.set(
       "Recovery Status",
@@ -161,6 +194,7 @@ void ofApp::setupGuiParameters() {
   // ofParameterのリスナーはこの後で登録するため、ここでは明示的に反映する。
   realtimeMode = pRealtime.get();
   ofSetFrameRate(pMainWindowTargetFps.get());
+  videoProcessor.processFps = static_cast<float>(pMainWindowTargetFps.get());
 
   pCameraIndex.addListener(this, &ofApp::onCameraIndexChanged);
   pRealtime.addListener(this, &ofApp::onRealtimeChanged);
@@ -171,8 +205,7 @@ void ofApp::setupGuiParameters() {
 
   pMainWindowTargetFps.addListener(
       this, &ofApp::onMainWindowTargetFpsChanged);
-  pRealtimeFps.addListener(this, &ofApp::onRealtimeFpsChanged);
-  pVideoFps.addListener(this, &ofApp::onVideoFpsChanged);
+  pExportAlpha.addListener(this, &ofApp::onExportAlphaChanged);
   pPresetIndex.addListener(this, &ofApp::onPresetIndexChanged);
 
   playButton.setup("Play");
@@ -212,8 +245,6 @@ void ofApp::setupGuiParameters() {
     humanGraphicsScene->setSceneLayout(pSceneLayoutId.get());
     humanGraphicsScene->setSceneBehavior(pSceneBehaviorId.get());
   }
-  videoProcessor.processFps = static_cast<float>(pVideoFps.get());
-
   rebuildGuiPanel();
   showGuiWindow();
 }
@@ -243,8 +274,7 @@ void ofApp::setupGuiPersistence() {
   guiParams.add(pSceneLayoutId);
   guiParams.add(pSceneBehaviorId);
   guiParams.add(pMainWindowTargetFps);
-  guiParams.add(pRealtimeFps);
-  guiParams.add(pVideoFps);
+  guiParams.add(pExportAlpha);
 
   // プリセットは見た目・検出設定だけを変更し、現在の入力モード
   // （RealtimeかVideoか）は変更しない。root名はcontrols.jsonと同じにして、
@@ -270,8 +300,6 @@ void ofApp::setupGuiPersistence() {
   presetParams.add(pMergeEventId);
   presetParams.add(pSceneLayoutId);
   presetParams.add(pSceneBehaviorId);
-  presetParams.add(pRealtimeFps);
-  presetParams.add(pVideoFps);
 }
 
 //--------------------------------------------------------------
@@ -477,7 +505,6 @@ void ofApp::rebuildGuiPanel() {
       gui.add(pCameraIndex);
       gui.add(pCameraName);
       gui.add(pFlipHorizontal);
-      gui.add<float>(pRealtimeFps);
   }
 
 
@@ -496,17 +523,13 @@ void ofApp::rebuildGuiPanel() {
   gui.add(pGraphicsStrokeRound);
   gui.add(pGraphicsBaseMaterial);
   gui.add(pGraphicsStrokeMaterial);
-  gui.add(pRenderRecipeId);
-  gui.add(pMergeEventId);
-  gui.add(pSceneLayoutId);
-  gui.add(pSceneBehaviorId);
 
   // 動画モード時のみUIを追加
   if (!realtimeMode) {
-    gui.add(pVideoFps);
     gui.add(&playButton);
     gui.add(&pauseButton);
     gui.add(&restartButton);
+    gui.add(pExportAlpha);
     gui.add(&exportImageSequenceButton);
     gui.add(pVideoStatusText);
   }
@@ -543,6 +566,13 @@ void ofApp::updateControlsMetrics() {
 //--------------------------------------------------------------
 void ofApp::onMainWindowTargetFpsChanged(int &value) {
   ofSetFrameRate(value);
+  videoProcessor.processFps = static_cast<float>(value);
+  lastRealtimeProcessMs = 0;
+  saveGuiSettings();
+}
+
+//--------------------------------------------------------------
+void ofApp::onExportAlphaChanged(bool &value) {
   saveGuiSettings();
 }
 
@@ -708,19 +738,6 @@ void ofApp::onRealtimeChanged(bool &value) {
 }
 
 //--------------------------------------------------------------
-void ofApp::onRealtimeFpsChanged(float &value) {
-  // 設定変更後に前回の処理間隔を持ち越さないようにする。
-  lastRealtimeProcessMs = 0;
-  saveGuiSettings();
-}
-
-//--------------------------------------------------------------
-void ofApp::onVideoFpsChanged(int &value) {
-  videoProcessor.processFps = static_cast<float>(value);
-  saveGuiSettings();
-}
-
-//--------------------------------------------------------------
 void ofApp::onPlayPressed() {
   videoProcessor.play();
 }
@@ -780,6 +797,7 @@ void ofApp::startImageSequenceExport() {
   exportColorImg.allocate(exportWidth, exportHeight);
   exportFbo.allocate(exportWidth, exportHeight, GL_RGBA);
   exportPixels.allocate(exportWidth, exportHeight, OF_PIXELS_RGBA);
+  exportAlpha = pExportAlpha.get();
 
   // Mainの描画用Sceneとは別インスタンスを使うため、書き出し中も
   // Main Windowのループ再生と色・輪郭の状態を維持できる。
@@ -839,7 +857,13 @@ void ofApp::updateImageSequenceExport() {
 
   exportScene->update(exportData);
   exportFbo.begin();
-  exportScene->draw();
+  if (exportAlpha) {
+    ofClear(0, 0, 0, 0);
+  } else {
+    ofClear(ofApp::background_color, ofApp::background_color,
+            ofApp::background_color, 255);
+  }
+  exportScene->draw(!exportAlpha);
   exportFbo.end();
 
   exportFbo.readToPixels(exportPixels);
@@ -1122,12 +1146,11 @@ void ofApp::update() {
     // ============================================
     cam.update();
 
-    const float fps = pRealtimeFps.get();
+    const float fps = static_cast<float>(pMainWindowTargetFps.get());
     const uint64_t intervalMs = static_cast<uint64_t>(1000.0f / fps);
     const uint64_t now = ofGetElapsedTimeMillis();
 
-    if (cam.isFrameNew() && personSegmenter.isLoaded() &&
-        (now - lastRealtimeProcessMs) >= intervalMs) {
+    if (cam.isFrameNew()) {
       const ofPixels &cameraPixels = cam.getPixels();
       const int frameWidth = cameraPixels.getWidth();
       const int frameHeight = cameraPixels.getHeight();
@@ -1135,28 +1158,26 @@ void ofApp::update() {
         return;
       }
 
+      // カメラプレビューはAIモデルの読込成否に関係なく常に更新する。
       colorImg.setFromPixels(cameraPixels);
 
-      // ★追加: 左右反転トグルがONのときは、以降のAI推論・
-      //   デバッグプレビューすべてに反映されるよう、ここでcolorImg自体を反転する。
-      //   (mirror(bFlipVertical, bFlipHorizontal))
+      // 左右反転はプレビューとAI推論の両方へ反映する。
       if (pFlipHorizontal) {
         colorImg.mirror(false, true);
       }
 
-      // カメラは要求解像度とは異なるサイズを返すことがあるため、
-      // 固定の W/H ではなく、実際に届いたフレームサイズで作成する。
-      cv::Mat rgbMat(frameHeight, frameWidth, CV_8UC3,
-                     colorImg.getPixels().getData());
+      // AIモデルが利用可能な場合だけ、設定した間隔で人物検出を行う。
+      if (personSegmenter.isLoaded() &&
+          (now - lastRealtimeProcessMs) >= intervalMs) {
+        // カメラは要求解像度とは異なるサイズを返すことがあるため、
+        // 実際に届いたフレームサイズでMatを作成する。
+        cv::Mat rgbMat(frameHeight, frameWidth, CV_8UC3,
+                       colorImg.getPixels().getData());
 
-      // ============================================
-      // ★変更: YOLO11-seg(person専用)で人物ごとの輪郭を検出する。
-      //   PersonSegmenterが内部でレターボックス・推論・NMS・
-      //   マスク→輪郭変換まで行い、ofGetWidth()/Height()座標系の
-      //   HumanContourDataをそのまま返してくれる。
-      // ============================================
-      humanData = personSegmenter.detect(rgbMat, ofGetWidth(), ofGetHeight());
-      lastRealtimeProcessMs = now;
+        humanData =
+            personSegmenter.detect(rgbMat, ofGetWidth(), ofGetHeight());
+        lastRealtimeProcessMs = now;
+      }
     }
   } else {
     // ============================================
@@ -1243,12 +1264,16 @@ void ofApp::drawDebug() {
   info += "Model: YOLO11-seg (person only)\n";
   info += "Mode: " + string(realtimeMode ? "Realtime (Camera)" : "Video File") + "\n";
   if (realtimeMode) {
+    info += "Camera initialized: " + string(cam.isInitialized() ? "Yes" : "No") + "\n";
+    info += "Camera frame: " + ofToString(colorImg.getWidth()) + " x " +
+            ofToString(colorImg.getHeight()) + "\n";
+    info += "AI model loaded: " + string(personSegmenter.isLoaded() ? "Yes" : "No") + "\n";
     info += "Detected People: " + ofToString(humanData.numHumans) + "\n";
     info += "Confidence: " + ofToString(personSegmenter.confThreshold, 2) + " [UP/DOWN: Adjust]\n";
   } else {
     info += "Detected People: " + ofToString(videoProcessor.humanData.numHumans) + "\n";
     info += "Confidence: " + ofToString(personSegmenter.confThreshold, 2) + " [UP/DOWN: Adjust]\n";
-    info += "Video FPS setting: " + ofToString(videoProcessor.processFps, 1) + "\n";
+    info += "Target FPS: " + ofToString(pMainWindowTargetFps.get()) + "\n";
     info += "Playing: " + string(videoProcessor.isVideoPlaying() ? "Yes" : "No (Paused)") + "\n";
   }
   info += "Scene Selection: '1' -> Scene 1\n";

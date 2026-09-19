@@ -1,0 +1,66 @@
+{
+  "buildCommand" : {
+    "command" : "build",
+    "skipDependencies" : false,
+    "style" : "buildOnly"
+  },
+  "configuredTargets" : [
+    {
+      "guid" : "de2f4451cc8a5c5f4e1ff86b3c453d96c858a6ef4a6ea7558fc2d5ed48a0d97c"
+    }
+  ],
+  "containerPath" : "/Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/GUxSID_Human_Graphics.xcodeproj",
+  "continueBuildingAfterErrors" : false,
+  "dependencyScope" : "workspace",
+  "enableIndexBuildArena" : false,
+  "hideShellScriptEnvironment" : false,
+  "parameters" : {
+    "action" : "build",
+    "activeArchitecture" : "arm64",
+    "activeRunDestination" : {
+      "disableOnlyActiveArch" : false,
+      "hostTargetedPlatform" : null,
+      "platform" : "macosx",
+      "sdk" : "macosx27.0",
+      "sdkVariant" : "macos",
+      "supportedArchitectures" : [
+        "arm64e",
+        "arm64",
+        "x86_64"
+      ],
+      "targetArchitecture" : "arm64"
+    },
+    "arenaInfo" : {
+      "buildIntermediatesPath" : "/Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/build/DerivedData/Build/Intermediates.noindex",
+      "buildProductsPath" : "/Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/build/DerivedData/Build/Products",
+      "derivedDataPath" : "/Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/build/DerivedData",
+      "indexDataStoreFolderPath" : "/Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/build/DerivedData/Index.noindex/DataStore",
+      "indexEnableDataStore" : true,
+      "indexPCHPath" : "/Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/build/DerivedData/Index.noindex/PrecompiledHeaders",
+      "pchPath" : "/Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/build/DerivedData/Build/Intermediates.noindex/PrecompiledHeaders"
+    },
+    "configurationName" : "Release",
+    "overrides" : {
+      "commandLine" : {
+        "table" : {
+          "CONFIGURATION_BUILD_DIR" : "/Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/bin"
+        }
+      },
+      "synthesized" : {
+        "table" : {
+          "ACTION" : "build",
+          "COLOR_DIAGNOSTICS" : "YES",
+          "diagnostic_message_length" : "213",
+          "ENABLE_PREVIEWS" : "NO",
+          "ENABLE_XOJIT_PREVIEWS" : "YES"
+        }
+      }
+    }
+  },
+  "schemeCommand" : "launch",
+  "showNonLoggedProgress" : true,
+  "useDryRun" : false,
+  "useImplicitDependencies" : true,
+  "useLegacyBuildLocations" : false,
+  "useParallelTargets" : true
+}

@@ -612,7 +612,7 @@ obj/osx/Debug/src/ofApp.o: \
   src/scene/SceneBehavior.h src/scene/SceneComposer.h \
   src/scene/StandardSceneBehavior.h src/scene/StandardSceneLayout.h \
   src/scene/SceneLayout.h src/tracking/ObjectTracker.h \
-  src/video_Processing.h \
+  src/video_Processing.h src/CameraAuthorization.h \
   /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/libs/glfw/include/GLFW/glfw3.h
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/SDKSettings.json:
 src/ofApp.h:
@@ -1244,4 +1244,5 @@ src/scene/StandardSceneLayout.h:
 src/scene/SceneLayout.h:
 src/tracking/ObjectTracker.h:
 src/video_Processing.h:
+src/CameraAuthorization.h:
 /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/libs/glfw/include/GLFW/glfw3.h:

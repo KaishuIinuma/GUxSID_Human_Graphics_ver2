@@ -84,7 +84,7 @@ public:
   //   縦のサイズは余裕を持たせておくと良い。
   // ============================================
   static inline int controlWindowWidth = 600;
-  static inline int controlWindowHeight = 1020;
+  static inline int controlWindowHeight = 900;
 
   static inline ofColor colorPallate[colorPaletteSize] = {
       // ofColor(RGB)
@@ -214,11 +214,8 @@ public:
   // false: ドロップされた動画ファイルを使用
   ofParameter<bool> pRealtime;
 
-  // Realtimeモード時、セグメンテーション処理を行うfps (0.5〜60)
-  ofParameter<float> pRealtimeFps;
-
-  // 動画モード時、セグメンテーション処理を行うfps (1〜60)
-  ofParameter<int> pVideoFps;
+  // PNG連番書き出し時に背景を透明にする。
+  ofParameter<bool> pExportAlpha;
 
   // 動画モード時にControl Windowへ表示するステータス文言
   // (ドロップ待ち／読み込み中／再生中のファイル名などを表示)
@@ -243,8 +240,7 @@ public:
   void onScene3StrokeWeightChanged(float &value);
   void onRealtimeChanged(bool &value);
   void onMainWindowTargetFpsChanged(int &value);
-  void onRealtimeFpsChanged(float &value);
-  void onVideoFpsChanged(int &value);
+  void onExportAlphaChanged(bool &value);
   void onPlayPressed();
   void onPausePressed();
   void onRestartPressed();
@@ -303,6 +299,7 @@ public:
 
   bool isExportingImageSequence = false;
   bool exportAwaitingFirstFrame = false;
+  bool exportAlpha = false;
   int exportFrameIndex = 0;
   int exportTotalFrames = 0;
   int exportWidth = 0;
