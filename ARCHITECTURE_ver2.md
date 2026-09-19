@@ -67,10 +67,12 @@ palette assignment, GUI values, and video export flow are retained.
 then overlays a solid Stroke using the current background color. Presets select
 the active Recipe through `Recipe_ID`.
 
-`recursive_split.json` combines `recursive_split_layout` with
-`recursive_stroke_render`. `floating_bridge.json` combines
-`floating_behavior` with `floating_bridge_render`; objects are paired in
-detection order and their bridge is drawn behind the object fills.
+`floating_bridge.json` combines `floating_behavior` with
+`floating_bridge_render`; objects are paired in detection order and their
+bridge is drawn behind the object fills. Each bridge uses the two contour
+vertices that are farthest apart on the axis perpendicular to the line between
+the paired object centers. Paired motion uses shared and mirrored displacement,
+with reciprocal scale changes, instead of independent noise motion.
 
 ver2 stores its GUI settings and crash marker under
 `Application Support/GUxSID_Human_Graphics_ver2`, independently from the

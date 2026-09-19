@@ -84,7 +84,7 @@ public:
   //   縦のサイズは余裕を持たせておくと良い。
   // ============================================
   static inline int controlWindowWidth = 600;
-  static inline int controlWindowHeight = 900;
+  static inline int controlWindowHeight = 1020;
 
   static inline ofColor colorPallate[colorPaletteSize] = {
       // ofColor(RGB)
@@ -157,6 +157,14 @@ public:
   bool previousRunCrashed = false;
   ofJson defaultGuiSettings;
 
+  // Main Windowの動作状況と描画目標FPSをControlsへ表示する。
+  // ステータス3種は保存せず、目標FPSだけcontrols.jsonへ保存する。
+  ofParameter<string> pMainWindowResolution;
+  ofParameter<string> pMainWindowFps;
+  ofParameter<string> pRunTime;
+  ofParameter<int> pMainWindowTargetFps;
+  uint64_t lastControlsMetricsUpdateMs = 0;
+
   // 全体設定
   // ★変更: MediaPipeの二値化しきい値から、YOLOの人物信頼度しきい値に転用。
   //   実体は personSegmenter.confThreshold (0.0〜1.0)。
@@ -227,12 +235,14 @@ public:
   ofxButton resetParametersButton;
 
   void setupGuiParameters();
+  void updateControlsMetrics();
   void onContourThresholdChanged(float &value);
   void onVertexCountChanged(int &value);
   void onColorUpdateIntervalChanged(float &value);
   void onScene2OffsetChanged(float &value);
   void onScene3StrokeWeightChanged(float &value);
   void onRealtimeChanged(bool &value);
+  void onMainWindowTargetFpsChanged(int &value);
   void onRealtimeFpsChanged(float &value);
   void onVideoFpsChanged(int &value);
   void onPlayPressed();

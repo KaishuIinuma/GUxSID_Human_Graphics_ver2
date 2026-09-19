@@ -67,28 +67,15 @@ class FloatingBridgeRenderRecipe final : public RenderRecipe {
     return result;
   }
 
-  static EdgePair facingEdge(const ofPolyline& polygon,
-                             const glm::vec2& direction, bool front) {
+  static EdgePair perpendicularExtremes(const ofPolyline& polygon,
+                                        const glm::vec2& direction) {
     EdgePair result;
     if (polygon.size() < 2) return result;
     const glm::vec2 perpendicular(-direction.y, direction.x);
-    float minimum = std::numeric_limits<float>::max();
-    float maximum = std::numeric_limits<float>::lowest();
-    for (const auto& point : polygon) {
-      const float projection = glm::dot(glm::vec2(point.x, point.y), direction);
-      minimum = std::min(minimum, projection);
-      maximum = std::max(maximum, projection);
-    }
-    const float band = std::max(8.0f, (maximum - minimum) * 0.3f);
-    const float threshold = front ? maximum - band : minimum + band;
     float lowProjection = std::numeric_limits<float>::max();
     float highProjection = std::numeric_limits<float>::lowest();
     for (const auto& point3 : polygon) {
       const glm::vec2 point(point3.x, point3.y);
-      const float forward = glm::dot(point, direction);
-      if ((front && forward < threshold) || (!front && forward > threshold)) {
-        continue;
-      }
       const float across = glm::dot(point, perpendicular);
       if (across < lowProjection) {
         lowProjection = across;
@@ -114,8 +101,10 @@ class FloatingBridgeRenderRecipe final : public RenderRecipe {
     const glm::vec2 difference = secondCenter - firstCenter;
     if (glm::length(difference) < 1.0f) return;
     const glm::vec2 direction = glm::normalize(difference);
-    const EdgePair firstEdge = facingEdge(firstGeometry, direction, true);
-    const EdgePair secondEdge = facingEdge(secondGeometry, direction, false);
+    const EdgePair firstEdge =
+        perpendicularExtremes(firstGeometry, direction);
+    const EdgePair secondEdge =
+        perpendicularExtremes(secondGeometry, direction);
     if (!firstEdge.valid || !secondEdge.valid) return;
 
     ofPolyline bridge;

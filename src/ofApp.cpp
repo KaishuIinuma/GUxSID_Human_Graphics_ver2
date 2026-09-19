@@ -1,6 +1,8 @@
 #include "ofApp.h"
 #include <GLFW/glfw3.h> // guiWindow/mainWindowの表示切り替え・リサイズ用
 #include <algorithm>
+#include <iomanip>
+#include <sstream>
 
 namespace {
 const std::string kSettingsDirectoryName =
@@ -80,6 +82,10 @@ void ofApp::setupGuiParameters() {
   ofxBaseGui::setDefaultTextPadding(8);
 
   pRealtime.set("Realtime", true);
+  pMainWindowResolution.set("Main Window Resolution", "-- x --");
+  pMainWindowFps.set("Main Window FPS", "--");
+  pRunTime.set("Run Time", "00:00:00");
+  pMainWindowTargetFps.set("Main Window Target FPS", 60, 1, 120);
   // ★追加: カメラ選択用パラメーターの初期化
   int maxCameraIndex = std::max(0, (int)cameraDevices.size() - 1);
   int defaultCameraIndex = getDefaultCameraIndex();
@@ -154,6 +160,7 @@ void ofApp::setupGuiParameters() {
   // 保存済みモードを先に確定し、Video起動時にカメラを開かないようにする。
   // ofParameterのリスナーはこの後で登録するため、ここでは明示的に反映する。
   realtimeMode = pRealtime.get();
+  ofSetFrameRate(pMainWindowTargetFps.get());
 
   pCameraIndex.addListener(this, &ofApp::onCameraIndexChanged);
   pRealtime.addListener(this, &ofApp::onRealtimeChanged);
@@ -162,6 +169,8 @@ void ofApp::setupGuiParameters() {
   pVertexCount.addListener(this, &ofApp::onVertexCountChanged);
   pColorUpdateIntervalSec.addListener(this, &ofApp::onColorUpdateIntervalChanged);
 
+  pMainWindowTargetFps.addListener(
+      this, &ofApp::onMainWindowTargetFpsChanged);
   pRealtimeFps.addListener(this, &ofApp::onRealtimeFpsChanged);
   pVideoFps.addListener(this, &ofApp::onVideoFpsChanged);
   pPresetIndex.addListener(this, &ofApp::onPresetIndexChanged);
@@ -233,6 +242,7 @@ void ofApp::setupGuiPersistence() {
   guiParams.add(pMergeEventId);
   guiParams.add(pSceneLayoutId);
   guiParams.add(pSceneBehaviorId);
+  guiParams.add(pMainWindowTargetFps);
   guiParams.add(pRealtimeFps);
   guiParams.add(pVideoFps);
 
@@ -450,6 +460,10 @@ void ofApp::rebuildGuiPanel() {
   gui.setup("Controls"); // guiParamsを使わず、文字列で直接初期化
 
   // 共通のUIを追加
+  gui.add(pMainWindowResolution);
+  gui.add(pMainWindowTargetFps);
+  gui.add(pMainWindowFps);
+  gui.add(pRunTime);
   gui.add(pRealtime);
   if (previousRunCrashed) {
     gui.add(pCrashStatusText);
@@ -496,6 +510,40 @@ void ofApp::rebuildGuiPanel() {
     gui.add(&exportImageSequenceButton);
     gui.add(pVideoStatusText);
   }
+}
+
+//--------------------------------------------------------------
+void ofApp::updateControlsMetrics() {
+  const uint64_t now = ofGetElapsedTimeMillis();
+  if (now - lastControlsMetricsUpdateMs < 250) return;
+  lastControlsMetricsUpdateMs = now;
+
+  if (mainWindow && mainWindow->getGLFWWindow()) {
+    const glm::vec2 size = mainWindow->getWindowSize();
+    pMainWindowResolution =
+        ofToString(static_cast<int>(std::lround(size.x))) + " x " +
+        ofToString(static_cast<int>(std::lround(size.y)));
+    pMainWindowFps = ofToString(ofGetFrameRate(), 1) + " / " +
+                     ofToString(pMainWindowTargetFps.get()) + " fps";
+  } else {
+    pMainWindowResolution = "Unavailable";
+    pMainWindowFps = "--";
+  }
+
+  const uint64_t totalSeconds = now / 1000;
+  const uint64_t hours = totalSeconds / 3600;
+  const uint64_t minutes = (totalSeconds / 60) % 60;
+  const uint64_t seconds = totalSeconds % 60;
+  std::ostringstream runTime;
+  runTime << std::setfill('0') << std::setw(2) << hours << ':'
+          << std::setw(2) << minutes << ':' << std::setw(2) << seconds;
+  pRunTime = runTime.str();
+}
+
+//--------------------------------------------------------------
+void ofApp::onMainWindowTargetFpsChanged(int &value) {
+  ofSetFrameRate(value);
+  saveGuiSettings();
 }
 
 //--------------------------------------------------------------
@@ -573,13 +621,17 @@ void ofApp::onGraphicsStrokeMaterialChanged(int &value) {
 }
 
 void ofApp::onRenderRecipeIdChanged(string &value) {
+    const bool isKnownRecipe =
+        value == gux::StandardRenderRecipe::RecipeId ||
+        value == gux::MixRenderRecipe::RecipeId ||
+        value == gux::FloatingBridgeRenderRecipe::RecipeId;
+    const std::string activeId = isKnownRecipe
+        ? value : std::string(gux::StandardRenderRecipe::RecipeId);
+    if (!isKnownRecipe) {
+        pRenderRecipeId.setWithoutEventNotifications(activeId);
+    }
     if (humanGraphicsScene) {
-        humanGraphicsScene->setRenderRecipe(value);
-        const std::string activeId(humanGraphicsScene->renderRecipeId());
-        if (activeId != value) {
-            ofLogWarning("ofApp") << "Unknown Recipe ID: " << value
-                                  << ". Active Recipe: " << activeId;
-        }
+        humanGraphicsScene->setRenderRecipe(activeId);
     }
     saveGuiSettings();
 }
@@ -597,13 +649,12 @@ void ofApp::onMergeEventIdChanged(string &value) {
 }
 
 void ofApp::onSceneLayoutIdChanged(string &value) {
+    const std::string standardId(gux::StandardSceneLayout::LayoutId);
+    if (value != standardId) {
+        pSceneLayoutId.setWithoutEventNotifications(standardId);
+    }
     if (humanGraphicsScene) {
-        humanGraphicsScene->setSceneLayout(value);
-        const std::string activeId(humanGraphicsScene->sceneLayoutId());
-        if (activeId != value) {
-            ofLogWarning("ofApp") << "Unknown Layout ID: " << value
-                                  << ". Active Layout: " << activeId;
-        }
+        humanGraphicsScene->setSceneLayout(standardId);
     }
     saveGuiSettings();
 }
@@ -1249,6 +1300,7 @@ void ofApp::keyPressed(int key) {
 void ofApp::drawGui(ofEventArgs & args) {
   // GUIウィンドウが表示状態の時だけ描画処理を行う
   if (guiVisible) {
+    updateControlsMetrics();
     ofBackground(40); // GUIウィンドウの背景色（暗いグレー）
     gui.draw();
   }

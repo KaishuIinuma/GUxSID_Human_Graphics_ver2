@@ -94,10 +94,6 @@ void HumanGraphicsScene::setRenderRecipe(const std::string& recipeId) {
     renderRecipe = std::make_shared<gux::MixRenderRecipe>();
     return;
   }
-  if (recipeId == gux::RecursiveStrokeRenderRecipe::RecipeId) {
-    renderRecipe = std::make_shared<gux::RecursiveStrokeRenderRecipe>();
-    return;
-  }
   if (recipeId == gux::FloatingBridgeRenderRecipe::RecipeId) {
     renderRecipe = std::make_shared<gux::FloatingBridgeRenderRecipe>();
     return;
@@ -131,16 +127,12 @@ std::string_view HumanGraphicsScene::mergeEventId() const {
 }
 
 void HumanGraphicsScene::setSceneLayout(const std::string& layoutId) {
-  if (layoutId == gux::RecursiveSplitLayout::LayoutId) {
-    sceneLayout = std::make_shared<gux::RecursiveSplitLayout>();
-  } else {
-    if (layoutId != gux::StandardSceneLayout::LayoutId) {
-      ofLogWarning("HumanGraphicsScene")
-          << "Unknown Layout ID: " << layoutId << ". Falling back to "
-          << gux::StandardSceneLayout::LayoutId;
-    }
-    sceneLayout = std::make_shared<gux::StandardSceneLayout>();
+  if (layoutId != gux::StandardSceneLayout::LayoutId) {
+    ofLogWarning("HumanGraphicsScene")
+        << "Unknown Layout ID: " << layoutId << ". Falling back to "
+        << gux::StandardSceneLayout::LayoutId;
   }
+  sceneLayout = std::make_shared<gux::StandardSceneLayout>();
   hasPipelineSignature = false;
 }
 
