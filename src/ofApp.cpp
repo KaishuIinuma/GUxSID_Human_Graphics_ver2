@@ -489,9 +489,9 @@ void ofApp::rebuildGuiPanel() {
 
   // 共通のUIを追加
   gui.add(pMainWindowResolution);
+  gui.add(pRunTime);
   gui.add(pMainWindowTargetFps);
   gui.add(pMainWindowFps);
-  gui.add(pRunTime);
   gui.add(pRealtime);
   if (previousRunCrashed) {
     gui.add(pCrashStatusText);
@@ -521,8 +521,6 @@ void ofApp::rebuildGuiPanel() {
   gui.add(pGraphicsOffsetRound);
   gui.add<float>(pGraphicsStrokeWeight);
   gui.add(pGraphicsStrokeRound);
-  gui.add(pGraphicsBaseMaterial);
-  gui.add(pGraphicsStrokeMaterial);
 
   // 動画モード時のみUIを追加
   if (!realtimeMode) {
