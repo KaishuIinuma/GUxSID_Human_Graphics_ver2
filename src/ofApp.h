@@ -4,6 +4,7 @@
 #include "ofMain.h"
 #include "ofxGui.h"
 #include "ofxOpenCv.h"
+#include <future>
 #include <memory>
 #include <opencv2/dnn.hpp>
 
@@ -257,10 +258,13 @@ public:
   // dragEvent / onGuiWindowFileDragged の両方から呼ばれる共通処理
   void handleDroppedFile(const ofDragInfo &dragInfo);
 
-  // 動画のループ再生とは独立して、HumanGraphicsSceneをPNG連番として書き出す。
+  // 動画のループ再生とは独立して、HumanGraphicsSceneをPNG連番として書き出し、
+  // 完了後にAVFoundationで無圧縮・ロスレスARGB MOVへ変換する。
   void startImageSequenceExport();
   void updateImageSequenceExport();
   void cancelImageSequenceExport();
+  void startMovieExport();
+  void updateMovieExport();
 
   // GUI設定の永続化と、Controls Windowの表示／再生成（Aキー）
   void setupGuiPersistence();
@@ -300,11 +304,16 @@ public:
   bool isExportingImageSequence = false;
   bool exportAwaitingFirstFrame = false;
   bool exportAlpha = false;
+  bool isExportingMovie = false;
   int exportFrameIndex = 0;
   int exportTotalFrames = 0;
   int exportWidth = 0;
   int exportHeight = 0;
+  double exportFrameRate = 30.0;
   std::string exportOutputDirectory;
+  std::string exportMoviePath;
+  std::string exportMovieCodecName;
+  std::future<std::string> exportMovieFuture;
   ofVideoPlayer exportVideoPlayer;
   ofxCvColorImage exportColorImg;
   ofFbo exportFbo;

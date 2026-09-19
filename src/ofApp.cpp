@@ -1,9 +1,17 @@
 #include "ofApp.h"
 #include "CameraAuthorization.h"
 #include <GLFW/glfw3.h> // guiWindow/mainWindowの表示切り替え・リサイズ用
+#ifdef TARGET_OSX
+#import <AVFoundation/AVFoundation.h>
+#import <ImageIO/ImageIO.h>
+#endif
 #include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <cstdlib>
 #include <iomanip>
 #include <sstream>
+#include <thread>
 
 namespace {
 const std::string kSettingsDirectoryName =
@@ -14,6 +22,223 @@ const std::string kRunningMarkerFileName = "running.marker";
 std::string settingsDirectoryPath() {
   return ofFilePath::join(ofFilePath::getUserHomeDir(), kSettingsDirectoryName);
 }
+
+#ifdef TARGET_OSX
+std::string nsErrorDescription(NSError *error) {
+  if (!error) return "unknown AVFoundation error";
+  const char *description = error.localizedDescription.UTF8String;
+  return description ? description : "unknown AVFoundation error";
+}
+
+void releasePixelBufferBytes(void *, const void *baseAddress) {
+  std::free(const_cast<void *>(baseAddress));
+}
+
+CVReturn createTightlyPackedARGBPixelBuffer(
+    int width, int height, CVPixelBufferRef *pixelBuffer) {
+  const size_t bytesPerRow = static_cast<size_t>(width) * 4;
+  void *pixels = std::calloc(static_cast<size_t>(height), bytesPerRow);
+  if (!pixels) return kCVReturnAllocationFailed;
+
+  const CVReturn result = CVPixelBufferCreateWithBytes(
+      kCFAllocatorDefault, width, height, kCVPixelFormatType_32ARGB, pixels,
+      bytesPerRow, releasePixelBufferBytes, nullptr, nullptr, pixelBuffer);
+  if (result != kCVReturnSuccess) std::free(pixels);
+  return result;
+}
+
+void convertPremultipliedToStraightARGB(
+    void *baseAddress, size_t bytesPerRow, int width, int height) {
+  auto *rows = static_cast<unsigned char *>(baseAddress);
+  for (int y = 0; y < height; ++y) {
+    unsigned char *pixel = rows + static_cast<size_t>(y) * bytesPerRow;
+    for (int x = 0; x < width; ++x, pixel += 4) {
+      const unsigned int alpha = pixel[0];
+      if (alpha == 0) {
+        pixel[1] = pixel[2] = pixel[3] = 0;
+      } else if (alpha < 255) {
+        pixel[1] = static_cast<unsigned char>(
+            std::min(255u, (pixel[1] * 255u + alpha / 2u) / alpha));
+        pixel[2] = static_cast<unsigned char>(
+            std::min(255u, (pixel[2] * 255u + alpha / 2u) / alpha));
+        pixel[3] = static_cast<unsigned char>(
+            std::min(255u, (pixel[3] * 255u + alpha / 2u) / alpha));
+      }
+    }
+  }
+}
+
+std::string createLosslessMovieWithAVFoundation(
+    const std::string &pngDirectory,
+    const std::string &moviePath,
+    int width,
+    int height,
+    int frameCount,
+    double frameRate) {
+  @autoreleasepool {
+    NSString *moviePathString =
+        [NSString stringWithUTF8String:moviePath.c_str()];
+    if (!moviePathString) return "invalid MOV output path";
+
+    NSURL *movieURL = [NSURL fileURLWithPath:moviePathString];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:moviePathString]) {
+      return "MOV output already exists";
+    }
+
+    NSError *writerError = nil;
+    AVAssetWriter *writer = [[AVAssetWriter alloc]
+        initWithURL:movieURL
+        fileType:AVFileTypeQuickTimeMovie
+        error:&writerError];
+    if (!writer) return nsErrorDescription(writerError);
+
+    CVPixelBufferRef formatBuffer = nullptr;
+    const CVReturn formatBufferResult = createTightlyPackedARGBPixelBuffer(
+        width, height, &formatBuffer);
+    if (formatBufferResult != kCVReturnSuccess || !formatBuffer) {
+      return "could not create the lossless MOV format buffer";
+    }
+    CMVideoFormatDescriptionRef formatDescription = nullptr;
+    const OSStatus formatResult = CMVideoFormatDescriptionCreateForImageBuffer(
+        kCFAllocatorDefault, formatBuffer, &formatDescription);
+    CVPixelBufferRelease(formatBuffer);
+    if (formatResult != noErr || !formatDescription) {
+      return "could not create the lossless MOV format description";
+    }
+
+    // outputSettings=nilで既に生成したARGBフレームを再圧縮せずMOVへ格納する。
+    // 外部コーデック不要で、PNGの画質とアルファを完全に維持する。
+    AVAssetWriterInput *videoInput = [[AVAssetWriterInput alloc]
+        initWithMediaType:AVMediaTypeVideo
+        outputSettings:nil
+        sourceFormatHint:formatDescription];
+    CFRelease(formatDescription);
+    videoInput.expectsMediaDataInRealTime = NO;
+
+    if (![writer canAddInput:videoInput]) {
+      return "AVFoundation cannot add the lossless ARGB video input";
+    }
+    [writer addInput:videoInput];
+    if (![writer startWriting]) {
+      return nsErrorDescription(writer.error);
+    }
+    [writer startSessionAtSourceTime:kCMTimeZero];
+
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    if (!colorSpace) {
+      [writer cancelWriting];
+      return "could not create RGB color space";
+    }
+
+    NSString *directory =
+        [NSString stringWithUTF8String:pngDirectory.c_str()];
+    std::string failure;
+    for (int frameIndex = 0; frameIndex < frameCount; ++frameIndex) {
+      @autoreleasepool {
+        while (!videoInput.readyForMoreMediaData &&
+               writer.status == AVAssetWriterStatusWriting) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        if (writer.status != AVAssetWriterStatusWriting) {
+          failure = nsErrorDescription(writer.error);
+          break;
+        }
+
+        NSString *frameName = [NSString
+            stringWithFormat:@"frame_%06d.png", frameIndex + 1];
+        NSString *framePath = [directory stringByAppendingPathComponent:frameName];
+        NSURL *frameURL = [NSURL fileURLWithPath:framePath];
+        CGImageSourceRef imageSource = CGImageSourceCreateWithURL(
+            (__bridge CFURLRef)frameURL, nullptr);
+        CGImageRef image = imageSource
+            ? CGImageSourceCreateImageAtIndex(imageSource, 0, nullptr)
+            : nullptr;
+        if (imageSource) CFRelease(imageSource);
+        if (!image) {
+          failure = "could not read PNG frame " +
+              ofToString(frameIndex + 1);
+          break;
+        }
+
+        CVPixelBufferRef pixelBuffer = nullptr;
+        const CVReturn bufferResult = createTightlyPackedARGBPixelBuffer(
+            width, height, &pixelBuffer);
+        if (bufferResult != kCVReturnSuccess || !pixelBuffer) {
+          CGImageRelease(image);
+          failure = "could not allocate video pixel buffer";
+          break;
+        }
+
+        CVPixelBufferLockBaseAddress(pixelBuffer, 0);
+        void *baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer);
+        const size_t bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer);
+        CGContextRef context = CGBitmapContextCreate(
+            baseAddress, width, height, 8, bytesPerRow, colorSpace,
+            kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Big);
+        if (!context) {
+          CVPixelBufferUnlockBaseAddress(pixelBuffer, 0);
+          CVPixelBufferRelease(pixelBuffer);
+          CGImageRelease(image);
+          failure = "could not create video bitmap context";
+          break;
+        }
+
+        CGContextClearRect(context, CGRectMake(0, 0, width, height));
+        CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
+        CGContextRelease(context);
+        CGImageRelease(image);
+        convertPremultipliedToStraightARGB(
+            baseAddress, bytesPerRow, width, height);
+        CVPixelBufferUnlockBaseAddress(pixelBuffer, 0);
+
+        CMSampleTimingInfo timing = {
+            CMTimeMakeWithSeconds(1.0 / frameRate, 60000),
+            CMTimeMakeWithSeconds(
+                static_cast<double>(frameIndex) / frameRate, 60000),
+            kCMTimeInvalid};
+        CMVideoFormatDescriptionRef frameFormat = nullptr;
+        const OSStatus frameFormatResult =
+            CMVideoFormatDescriptionCreateForImageBuffer(
+                kCFAllocatorDefault, pixelBuffer, &frameFormat);
+        CMSampleBufferRef sampleBuffer = nullptr;
+        const OSStatus sampleResult = frameFormatResult == noErr
+            ? CMSampleBufferCreateReadyWithImageBuffer(
+                  kCFAllocatorDefault, pixelBuffer, frameFormat, &timing,
+                  &sampleBuffer)
+            : frameFormatResult;
+        const bool appended = sampleResult == noErr && sampleBuffer &&
+            [videoInput appendSampleBuffer:sampleBuffer];
+        if (sampleBuffer) CFRelease(sampleBuffer);
+        if (frameFormat) CFRelease(frameFormat);
+        if (!appended) {
+          failure = nsErrorDescription(writer.error);
+          CVPixelBufferRelease(pixelBuffer);
+          break;
+        }
+        CVPixelBufferRelease(pixelBuffer);
+      }
+    }
+    CGColorSpaceRelease(colorSpace);
+
+    if (!failure.empty()) {
+      [videoInput markAsFinished];
+      [writer cancelWriting];
+      return failure;
+    }
+
+    [videoInput markAsFinished];
+    dispatch_semaphore_t completionSemaphore = dispatch_semaphore_create(0);
+    [writer finishWritingWithCompletionHandler:^{
+      dispatch_semaphore_signal(completionSemaphore);
+    }];
+    dispatch_semaphore_wait(completionSemaphore, DISPATCH_TIME_FOREVER);
+    if (writer.status != AVAssetWriterStatusCompleted) {
+      return nsErrorDescription(writer.error);
+    }
+    return "";
+  }
+}
+#endif
 
 void configureBundledDataPath() {
 #ifdef TARGET_OSX
@@ -757,7 +982,7 @@ void ofApp::onExportImageSequencePressed() {
 
 //--------------------------------------------------------------
 void ofApp::startImageSequenceExport() {
-  if (isExportingImageSequence) {
+  if (isExportingImageSequence || isExportingMovie) {
     pVideoStatusText = "Export is already running";
     return;
   }
@@ -774,6 +999,13 @@ void ofApp::startImageSequenceExport() {
   exportWidth = static_cast<int>(exportVideoPlayer.getWidth());
   exportHeight = static_cast<int>(exportVideoPlayer.getHeight());
   exportTotalFrames = exportVideoPlayer.getTotalNumFrames();
+  const double sourceDurationSeconds = exportVideoPlayer.getDuration();
+  exportFrameRate = sourceDurationSeconds > 0.0
+      ? static_cast<double>(exportTotalFrames) / sourceDurationSeconds
+      : static_cast<double>(pMainWindowTargetFps.get());
+  if (!std::isfinite(exportFrameRate) || exportFrameRate <= 0.0) {
+    exportFrameRate = 30.0;
+  }
   if (exportWidth <= 0 || exportHeight <= 0 || exportTotalFrames <= 0) {
     pVideoStatusText = "Export failed: source video has no frames";
     exportVideoPlayer.close();
@@ -879,9 +1111,8 @@ void ofApp::updateImageSequenceExport() {
 
   ++exportFrameIndex;
   if (exportFrameIndex >= exportTotalFrames) {
-    pVideoStatusText = "Finished: " + ofToString(exportFrameIndex) +
-        " frames\n" + exportOutputDirectory;
     cancelImageSequenceExport();
+    startMovieExport();
     return;
   }
 
@@ -896,6 +1127,60 @@ void ofApp::cancelImageSequenceExport() {
   exportAwaitingFirstFrame = false;
   exportVideoPlayer.close();
   exportScene.reset();
+}
+
+//--------------------------------------------------------------
+void ofApp::startMovieExport() {
+  const std::string folderName =
+      ofFilePath::getFileName(exportOutputDirectory);
+  exportMoviePath = ofFilePath::join(
+      exportOutputDirectory, folderName + ".mov");
+
+#ifdef TARGET_OSX
+  exportMovieCodecName = "Uncompressed ARGB (lossless)";
+#else
+  exportMovieCodecName = "unsupported";
+#endif
+
+  isExportingMovie = true;
+  pVideoStatusText = "Creating highest-quality MOV (" +
+      exportMovieCodecName + ", AVFoundation)...\n" + exportMoviePath;
+  const std::string outputDirectory = exportOutputDirectory;
+  const std::string outputMoviePath = exportMoviePath;
+  const int width = exportWidth;
+  const int height = exportHeight;
+  const int frameCount = exportFrameIndex;
+  const double frameRate = exportFrameRate;
+  exportMovieFuture = std::async(std::launch::async, [=]() {
+#ifdef TARGET_OSX
+    return createLosslessMovieWithAVFoundation(
+        outputDirectory, outputMoviePath, width, height, frameCount,
+        frameRate);
+#else
+    return std::string("AVFoundation is available only on macOS");
+#endif
+  });
+}
+
+//--------------------------------------------------------------
+void ofApp::updateMovieExport() {
+  if (!isExportingMovie || !exportMovieFuture.valid()) return;
+  if (exportMovieFuture.wait_for(std::chrono::seconds(0)) !=
+      std::future_status::ready) {
+    return;
+  }
+
+  const std::string error = exportMovieFuture.get();
+  isExportingMovie = false;
+  if (error.empty() && ofFile::doesFileExist(exportMoviePath, false)) {
+    pVideoStatusText = "Finished: " + ofToString(exportFrameIndex) +
+        " PNG frames + MOV (" + exportMovieCodecName +
+        ", no audio, AVFoundation)\n" +
+        exportMoviePath;
+  } else {
+    pVideoStatusText = "PNG export finished, but MOV creation failed\n" +
+        error;
+  }
 }
 
 //--------------------------------------------------------------
@@ -1131,6 +1416,11 @@ void ofApp::onFlipHorizontalChanged(bool &value) {
 
 //--------------------------------------------------------------
 void ofApp::update() {
+  // MOV生成はバックグラウンドで進め、完了だけをMainスレッドで反映する。
+  if (isExportingMovie) {
+    updateMovieExport();
+  }
+
   // 書き出し中は通常のMain表示用処理を止め、書き出し専用プレイヤーの
   // 1フレームずつの処理だけを進める。
   if (isExportingImageSequence) {
