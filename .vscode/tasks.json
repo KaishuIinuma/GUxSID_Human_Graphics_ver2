@@ -23,7 +23,46 @@
                         "isDefault": true
                   },
                   "detail": "デバッガーによって生成されたタスク。"
+            },
+            {
+                  "label": "デバッグ",
+                  "type": "shell",
+                  "command": "make Debug",
+                  "inAgents": true
+            },
+            {
+                  "label": "実行",
+                  "type": "shell",
+                  "command": "make RunDebug",
+                  "inAgents": true
+            },
+            {
+                  "label": "Release",
+                  "type": "shell",
+                  "command": "make -j2 Debug && xcodebuild -project GUxSID_Human_Graphics.xcodeproj -target GUxSID_Human_Graphics -configuration Release build && mkdir -p outputs && rm -f outputs/GUxSID_Human_Graphics-ver2-macOS-universal.zip && ditto -c -k --sequesterRsrc --keepParent \\   bin/GUxSID_Human_Graphics.app \\   outputs/GUxSID_Human_Graphics-ver2-macOS-universal.zip",
+                  "inAgents": true
+            },
+            {
+                  "label": "Build Debug + Package Release ZIP",
+                  "type": "shell",
+                  "command": "make -j2 Debug && xcodebuild -project GUxSID_Human_Graphics.xcodeproj -target GUxSID_Human_Graphics -configuration Release build && mkdir -p outputs && rm -f outputs/GUxSID_Human_Graphics-ver2-macOS-universal.zip && ditto -c -k --sequesterRsrc --keepParent bin/GUxSID_Human_Graphics.app outputs/GUxSID_Human_Graphics-ver2-macOS-universal.zip",
+                  "options": {
+                        "cwd": "${workspaceFolder}"
+                  },
+                  "group": {
+                        "kind": "build",
+                        "isDefault": true
+                  },
+                  "problemMatcher": [
+                        "$gcc"
+                  ],
+                  "presentation": {
+                        "reveal": "always",
+                        "panel": "shared",
+                        "clear": true
+                  }
             }
       ],
       "version": "2.0.0"
+      
 }
