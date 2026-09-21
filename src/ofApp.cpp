@@ -821,6 +821,7 @@ void ofApp::startImageSequenceExport() {
   exportVideoPlayer.firstFrame();
   exportFrameIndex = 0;
   exportAwaitingFirstFrame = true;
+  exportFrameWaitStartedAtMillis = ofGetElapsedTimeMillis();
   isExportingImageSequence = true;
   pVideoStatusText = "Exporting: 0 / " + ofToString(exportTotalFrames);
 }
@@ -832,7 +833,17 @@ void ofApp::updateImageSequenceExport() {
   // 一度に1フレームだけ処理する。Main Windowの通常ループは停止中で、
   // この専用プレイヤーだけをフレーム送りする。
   exportVideoPlayer.update();
-  if (!exportVideoPlayer.isFrameNew()) return;
+  if (!exportVideoPlayer.isFrameNew()) {
+    constexpr uint64_t kFrameDecodeTimeoutMillis = 10000;
+    if (ofGetElapsedTimeMillis() - exportFrameWaitStartedAtMillis >=
+        kFrameDecodeTimeoutMillis) {
+      pVideoStatusText = "Export failed: timed out while decoding frame " +
+          ofToString(exportFrameIndex + 1) + " / " +
+          ofToString(exportTotalFrames);
+      cancelImageSequenceExport();
+    }
+    return;
+  }
 
   if (exportAwaitingFirstFrame) {
     exportVideoPlayer.setPaused(true);
@@ -896,13 +907,26 @@ void ofApp::updateImageSequenceExport() {
 
   pVideoStatusText = "Exporting: " + ofToString(exportFrameIndex) +
       " / " + ofToString(exportTotalFrames);
-  exportVideoPlayer.nextFrame();
+  if (exportFrameIndex == exportTotalFrames - 1) {
+    // AVFoundationで末尾へnextFrame()すると、再生時刻がdurationに
+    // 吸着して最終フレームがisFrameNew()にならない場合がある。
+    // 最終フレームの直前へシークし、AssetReaderに末尾のサンプルを
+    // 選ばせることで180/180などの末尾待ちを防ぐ。
+    const float finalFrameSeekPosition = std::max(
+        0.0f, (static_cast<float>(exportFrameIndex) - 0.5f) /
+                  static_cast<float>(exportTotalFrames));
+    exportVideoPlayer.setPosition(finalFrameSeekPosition);
+  } else {
+    exportVideoPlayer.nextFrame();
+  }
+  exportFrameWaitStartedAtMillis = ofGetElapsedTimeMillis();
 }
 
 //--------------------------------------------------------------
 void ofApp::cancelImageSequenceExport() {
   isExportingImageSequence = false;
   exportAwaitingFirstFrame = false;
+  exportFrameWaitStartedAtMillis = 0;
   exportVideoPlayer.close();
   exportScene.reset();
 }
@@ -915,7 +939,7 @@ void ofApp::startMovieExport() {
       exportOutputDirectory, folderName + ".mov");
 
 #ifdef TARGET_OSX
-  exportMovieCodecName = "Uncompressed ARGB (lossless)";
+  exportMovieCodecName = "Apple ProRes 4444 (alpha)";
 #else
   exportMovieCodecName = "unsupported";
 #endif
@@ -931,7 +955,7 @@ void ofApp::startMovieExport() {
   const double frameRate = exportFrameRate;
   exportMovieFuture = std::async(std::launch::async, [=]() {
 #ifdef TARGET_OSX
-    return createLosslessMovieWithAVFoundation(
+    return createProRes4444MovieWithAVFoundation(
         outputDirectory, outputMoviePath, width, height, frameCount,
         frameRate);
 #else

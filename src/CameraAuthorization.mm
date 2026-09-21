@@ -81,7 +81,7 @@ bool ensureCameraAuthorization() {
     return granted == YES;
 }
 
-std::string createLosslessMovieWithAVFoundation(
+std::string createProRes4444MovieWithAVFoundation(
     const std::string &pngDirectory,
     const std::string &moviePath,
     int width,
@@ -109,27 +109,36 @@ std::string createLosslessMovieWithAVFoundation(
         const CVReturn formatBufferResult = createTightlyPackedARGBPixelBuffer(
             width, height, &formatBuffer);
         if (formatBufferResult != kCVReturnSuccess || !formatBuffer) {
-            return "could not create the lossless MOV format buffer";
+            return "could not create the ProRes 4444 format buffer";
         }
         CMVideoFormatDescriptionRef formatDescription = nullptr;
         const OSStatus formatResult = CMVideoFormatDescriptionCreateForImageBuffer(
             kCFAllocatorDefault, formatBuffer, &formatDescription);
         CVPixelBufferRelease(formatBuffer);
         if (formatResult != noErr || !formatDescription) {
-            return "could not create the lossless MOV format description";
+            return "could not create the ProRes 4444 format description";
         }
 
-        // outputSettings=nilで既に生成したARGBフレームを再圧縮せずMOVへ格納する。
-        // 外部コーデック不要で、PNGの画質とアルファを完全に維持する。
+        // macOS標準のProRes 4444でRGBを高品質に圧縮し、アルファも保持する。
+        NSDictionary *outputSettings = @{
+            AVVideoCodecKey: AVVideoCodecTypeAppleProRes4444,
+            AVVideoWidthKey: @(width),
+            AVVideoHeightKey: @(height)
+        };
+        if (![writer canApplyOutputSettings:outputSettings
+                              forMediaType:AVMediaTypeVideo]) {
+            CFRelease(formatDescription);
+            return "AVFoundation cannot apply ProRes 4444 output settings";
+        }
         AVAssetWriterInput *videoInput = [[AVAssetWriterInput alloc]
             initWithMediaType:AVMediaTypeVideo
-            outputSettings:nil
+            outputSettings:outputSettings
             sourceFormatHint:formatDescription];
         CFRelease(formatDescription);
         videoInput.expectsMediaDataInRealTime = NO;
 
         if (![writer canAddInput:videoInput]) {
-            return "AVFoundation cannot add the lossless ARGB video input";
+            return "AVFoundation cannot add the ProRes 4444 video input";
         }
         [writer addInput:videoInput];
         if (![writer startWriting]) {

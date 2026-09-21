@@ -259,7 +259,7 @@ public:
   void handleDroppedFile(const ofDragInfo &dragInfo);
 
   // 動画のループ再生とは独立して、HumanGraphicsSceneをPNG連番として書き出し、
-  // 完了後にAVFoundationで無圧縮・ロスレスARGB MOVへ変換する。
+  // 完了後にAVFoundationでアルファ付きProRes 4444 MOVへ変換する。
   void startImageSequenceExport();
   void updateImageSequenceExport();
   void cancelImageSequenceExport();
@@ -303,6 +303,7 @@ public:
 
   bool isExportingImageSequence = false;
   bool exportAwaitingFirstFrame = false;
+  uint64_t exportFrameWaitStartedAtMillis = 0;
   bool exportAlpha = false;
   bool isExportingMovie = false;
   int exportFrameIndex = 0;

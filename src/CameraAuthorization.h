@@ -7,9 +7,9 @@
 // and waits for the user's response before camera discovery begins.
 bool ensureCameraAuthorization();
 
-// Creates an uncompressed ARGB QuickTime movie from frame_XXXXXX.png files.
+// Creates an Apple ProRes 4444 QuickTime movie from frame_XXXXXX.png files.
 // Returns an empty string on success, or an error description on failure.
-std::string createLosslessMovieWithAVFoundation(
+std::string createProRes4444MovieWithAVFoundation(
     const std::string &pngDirectory,
     const std::string &moviePath,
     int width,
