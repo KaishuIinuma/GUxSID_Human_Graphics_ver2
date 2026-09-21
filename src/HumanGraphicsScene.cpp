@@ -1,6 +1,7 @@
 #include "HumanGraphicsScene.h"
 #include "ofApp.h"
 
+#include <algorithm>
 #include <functional>
 
 namespace {
@@ -27,6 +28,11 @@ void HumanGraphicsScene::setup() {
 }
 
 void HumanGraphicsScene::update(const HumanContourData& humanData) {
+  update(humanData, ofGetElapsedTimef(), ofGetLastFrameTime());
+}
+
+void HumanGraphicsScene::update(const HumanContourData& humanData,
+                                float elapsedSeconds, float deltaSeconds) {
   // Detectionはsegmentation実行時だけ更新されるため、同じ観測を毎描画フレーム
   // Trackerへ重複投入しない。
   const uint64_t currentDetectionSignature = detectionSignature(humanData);
@@ -57,7 +63,8 @@ void HumanGraphicsScene::update(const HumanContourData& humanData) {
 
   materialAssignmentSystem.update(
       sceneObjects, ofApp::colorPallate, ofApp::colorPaletteSize,
-      ofApp::colorUpdateIntervalMs, baseMaterialType, outlineMaterialType);
+      ofApp::colorUpdateIntervalMs, baseMaterialType, outlineMaterialType,
+      static_cast<uint64_t>(std::max(0.0f, elapsedSeconds) * 1000.0f));
 
   if (compositionUpdated && sceneLayout) {
     gux::LayoutContext layoutContext;
@@ -77,8 +84,8 @@ void HumanGraphicsScene::update(const HumanContourData& humanData) {
 
   if (sceneBehavior) {
     gux::BehaviorContext behaviorContext;
-    behaviorContext.elapsedSeconds = ofGetElapsedTimef();
-    behaviorContext.deltaSeconds = ofGetLastFrameTime();
+    behaviorContext.elapsedSeconds = elapsedSeconds;
+    behaviorContext.deltaSeconds = deltaSeconds;
     behaviorContext.compositionUpdated = compositionUpdated;
     sceneBehavior->update(sceneObjects, behaviorContext);
   }

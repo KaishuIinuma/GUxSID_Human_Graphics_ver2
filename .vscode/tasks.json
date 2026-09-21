@@ -39,7 +39,10 @@
             {
                   "label": "Release",
                   "type": "shell",
-                  "command": "make -j2 Debug && xcodebuild -project GUxSID_Human_Graphics.xcodeproj -target GUxSID_Human_Graphics -configuration Release build && mkdir -p outputs && rm -f outputs/GUxSID_Human_Graphics-ver2-macOS-universal.zip && ditto -c -k --sequesterRsrc --keepParent \\   bin/GUxSID_Human_Graphics.app \\   outputs/GUxSID_Human_Graphics-ver2-macOS-universal.zip",
+                  "command": "make -j2 Debug && xcodebuild -project GUxSID_Human_Graphics.xcodeproj -target GUxSID_Human_Graphics -configuration Release build && mkdir -p outputs && rm -f outputs/GUxSID_Human_Graphics-ver2-macOS-universal.zip && ditto -c -k --sequesterRsrc --keepParent bin/GUxSID_Human_Graphics.app outputs/GUxSID_Human_Graphics-ver2-macOS-universal.zip",
+                  "options": {
+                        "cwd": "${workspaceFolder}"
+                  },
                   "inAgents": true
             },
             {

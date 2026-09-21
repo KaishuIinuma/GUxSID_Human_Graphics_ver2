@@ -22,6 +22,8 @@ class HumanGraphicsScene : public BaseScene {
  public:
   void setup() override;
   void update(const HumanContourData& humanData) override;
+  void update(const HumanContourData& humanData, float elapsedSeconds,
+              float deltaSeconds);
   void draw() override;
   void draw(bool drawBackground);
   void setRenderRecipe(const std::string& recipeId);

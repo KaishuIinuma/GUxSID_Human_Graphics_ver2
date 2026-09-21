@@ -776,15 +776,24 @@ void ofApp::startImageSequenceExport() {
 
   exportWidth = static_cast<int>(exportVideoPlayer.getWidth());
   exportHeight = static_cast<int>(exportVideoPlayer.getHeight());
-  exportTotalFrames = exportVideoPlayer.getTotalNumFrames();
+  exportSourceTotalFrames = exportVideoPlayer.getTotalNumFrames();
   const double sourceDurationSeconds = exportVideoPlayer.getDuration();
-  exportFrameRate = sourceDurationSeconds > 0.0
-      ? static_cast<double>(exportTotalFrames) / sourceDurationSeconds
-      : static_cast<double>(pMainWindowTargetFps.get());
+  exportSourceFrameRate = sourceDurationSeconds > 0.0
+      ? static_cast<double>(exportSourceTotalFrames) / sourceDurationSeconds
+      : 30.0;
+  exportFrameRate = static_cast<double>(pMainWindowTargetFps.get());
+  if (!std::isfinite(exportSourceFrameRate) || exportSourceFrameRate <= 0.0) {
+    exportSourceFrameRate = 30.0;
+  }
   if (!std::isfinite(exportFrameRate) || exportFrameRate <= 0.0) {
     exportFrameRate = 30.0;
   }
-  if (exportWidth <= 0 || exportHeight <= 0 || exportTotalFrames <= 0) {
+  exportTotalFrames = sourceDurationSeconds > 0.0
+      ? std::max(1, static_cast<int>(std::llround(
+            sourceDurationSeconds * exportFrameRate)))
+      : exportSourceTotalFrames;
+  if (exportWidth <= 0 || exportHeight <= 0 ||
+      exportSourceTotalFrames <= 0 || exportTotalFrames <= 0) {
     pVideoStatusText = "Export failed: source video has no frames";
     exportVideoPlayer.close();
     return;
@@ -796,7 +805,10 @@ void ofApp::startImageSequenceExport() {
       videoProcessor.getLoadedFileName()) + "_" +
       ofGetTimestampString("%Y%m%d_%H%M%S");
   exportOutputDirectory = ofFilePath::join(exportRoot, exportFolder);
-  if (!ofDirectory::createDirectory(exportOutputDirectory, false, true)) {
+  exportPngDirectory = ofFilePath::join(exportOutputDirectory, "png");
+  exportMovieDirectory = ofFilePath::join(exportOutputDirectory, "mov");
+  if (!ofDirectory::createDirectory(exportPngDirectory, false, true) ||
+      !ofDirectory::createDirectory(exportMovieDirectory, false, true)) {
     pVideoStatusText = "Export failed: could not create output folder";
     exportVideoPlayer.close();
     return;
@@ -820,6 +832,9 @@ void ofApp::startImageSequenceExport() {
   exportVideoPlayer.play();
   exportVideoPlayer.firstFrame();
   exportFrameIndex = 0;
+  exportDecodedSourceFrame = -1;
+  exportDecodedData = HumanContourData();
+  exportTimelineStartSeconds = ofGetElapsedTimef();
   exportAwaitingFirstFrame = true;
   exportFrameWaitStartedAtMillis = ofGetElapsedTimeMillis();
   isExportingImageSequence = true;
@@ -830,51 +845,76 @@ void ofApp::startImageSequenceExport() {
 void ofApp::updateImageSequenceExport() {
   if (!isExportingImageSequence) return;
 
-  // 一度に1フレームだけ処理する。Main Windowの通常ループは停止中で、
-  // この専用プレイヤーだけをフレーム送りする。
-  exportVideoPlayer.update();
-  if (!exportVideoPlayer.isFrameNew()) {
-    constexpr uint64_t kFrameDecodeTimeoutMillis = 10000;
-    if (ofGetElapsedTimeMillis() - exportFrameWaitStartedAtMillis >=
-        kFrameDecodeTimeoutMillis) {
-      pVideoStatusText = "Export failed: timed out while decoding frame " +
-          ofToString(exportFrameIndex + 1) + " / " +
-          ofToString(exportTotalFrames);
-      cancelImageSequenceExport();
+  const int desiredSourceFrame = std::min(
+      exportSourceTotalFrames - 1,
+      static_cast<int>(std::floor(
+          static_cast<double>(exportFrameIndex) * exportSourceFrameRate /
+          exportFrameRate)));
+
+  // Target FPSがソースFPSより高い場合は同じデコード結果を複数回使い、
+  // 低い場合もAVFoundationへの連続シークを避けて1フレームずつ進める。
+  if (exportDecodedSourceFrame != desiredSourceFrame) {
+    exportVideoPlayer.update();
+    if (!exportVideoPlayer.isFrameNew()) {
+      constexpr uint64_t kFrameDecodeTimeoutMillis = 10000;
+      if (ofGetElapsedTimeMillis() - exportFrameWaitStartedAtMillis >=
+          kFrameDecodeTimeoutMillis) {
+        pVideoStatusText = "Export failed: timed out while decoding frame " +
+            ofToString(exportFrameIndex + 1) + " / " +
+            ofToString(exportTotalFrames);
+        cancelImageSequenceExport();
+      }
+      return;
     }
-    return;
+
+    if (exportAwaitingFirstFrame) {
+      exportVideoPlayer.setPaused(true);
+      exportAwaitingFirstFrame = false;
+    }
+
+    ++exportDecodedSourceFrame;
+    if (exportDecodedSourceFrame < desiredSourceFrame) {
+      if (exportDecodedSourceFrame + 1 == exportSourceTotalFrames - 1) {
+        const float finalFrameSeekPosition = std::max(
+            0.0f, (static_cast<float>(exportSourceTotalFrames - 1) - 0.5f) /
+                      static_cast<float>(exportSourceTotalFrames));
+        exportVideoPlayer.setPosition(finalFrameSeekPosition);
+      } else {
+        exportVideoPlayer.nextFrame();
+      }
+      exportFrameWaitStartedAtMillis = ofGetElapsedTimeMillis();
+      return;
+    }
+
+    const ofPixels& framePixels = exportVideoPlayer.getPixels();
+    if (!framePixels.isAllocated()) return;
+
+    cv::Mat rgbMat;
+    const int channels = framePixels.getNumChannels();
+    if (channels == 4) {
+      cv::Mat rgbaMat(exportHeight, exportWidth, CV_8UC4,
+                      const_cast<unsigned char*>(framePixels.getData()));
+      cv::cvtColor(rgbaMat, rgbMat, cv::COLOR_RGBA2RGB);
+    } else if (channels == 3) {
+      rgbMat = cv::Mat(exportHeight, exportWidth, CV_8UC3,
+                       const_cast<unsigned char*>(framePixels.getData()));
+    } else if (channels == 1) {
+      cv::Mat grayMat(exportHeight, exportWidth, CV_8UC1,
+                      const_cast<unsigned char*>(framePixels.getData()));
+      cv::cvtColor(grayMat, rgbMat, cv::COLOR_GRAY2RGB);
+    } else {
+      pVideoStatusText = "Export failed: unsupported pixel format";
+      cancelImageSequenceExport();
+      return;
+    }
+    exportDecodedData = personSegmenter.detect(
+        rgbMat, exportWidth, exportHeight);
   }
 
-  if (exportAwaitingFirstFrame) {
-    exportVideoPlayer.setPaused(true);
-    exportAwaitingFirstFrame = false;
-  }
-
-  const ofPixels& framePixels = exportVideoPlayer.getPixels();
-  if (!framePixels.isAllocated()) return;
-
-  cv::Mat rgbMat;
-  const int channels = framePixels.getNumChannels();
-  if (channels == 4) {
-    cv::Mat rgbaMat(exportHeight, exportWidth, CV_8UC4,
-                    const_cast<unsigned char*>(framePixels.getData()));
-    cv::cvtColor(rgbaMat, rgbMat, cv::COLOR_RGBA2RGB);
-  } else if (channels == 3) {
-    rgbMat = cv::Mat(exportHeight, exportWidth, CV_8UC3,
-                     const_cast<unsigned char*>(framePixels.getData()));
-  } else if (channels == 1) {
-    cv::Mat grayMat(exportHeight, exportWidth, CV_8UC1,
-                    const_cast<unsigned char*>(framePixels.getData()));
-    cv::cvtColor(grayMat, rgbMat, cv::COLOR_GRAY2RGB);
-  } else {
-    pVideoStatusText = "Export failed: unsupported pixel format";
-    cancelImageSequenceExport();
-    return;
-  }
-  const HumanContourData exportData = personSegmenter.detect(
-      rgbMat, exportWidth, exportHeight);
-
-  exportScene->update(exportData);
+  const float exportElapsedSeconds = exportTimelineStartSeconds +
+      static_cast<float>(exportFrameIndex / exportFrameRate);
+  exportScene->update(exportDecodedData, exportElapsedSeconds,
+                      static_cast<float>(1.0 / exportFrameRate));
   exportFbo.begin();
   if (exportAlpha) {
     ofClear(0, 0, 0, 0);
@@ -891,7 +931,7 @@ void ofApp::updateImageSequenceExport() {
 
   const std::string fileName = "frame_" +
       ofToString(exportFrameIndex + 1, 6, '0') + ".png";
-  const auto outputPath = ofFilePath::join(exportOutputDirectory, fileName);
+  const auto outputPath = ofFilePath::join(exportPngDirectory, fileName);
   if (!ofSaveImage(exportPixels, outputPath)) {
     pVideoStatusText = "Export failed while saving: " + outputPath;
     cancelImageSequenceExport();
@@ -907,14 +947,22 @@ void ofApp::updateImageSequenceExport() {
 
   pVideoStatusText = "Exporting: " + ofToString(exportFrameIndex) +
       " / " + ofToString(exportTotalFrames);
-  if (exportFrameIndex == exportTotalFrames - 1) {
+  const int nextSourceFrame = std::min(
+      exportSourceTotalFrames - 1,
+      static_cast<int>(std::floor(
+          static_cast<double>(exportFrameIndex) * exportSourceFrameRate /
+          exportFrameRate)));
+  if (nextSourceFrame == exportDecodedSourceFrame) {
+    return;
+  }
+  if (exportDecodedSourceFrame + 1 == exportSourceTotalFrames - 1) {
     // AVFoundationで末尾へnextFrame()すると、再生時刻がdurationに
     // 吸着して最終フレームがisFrameNew()にならない場合がある。
     // 最終フレームの直前へシークし、AssetReaderに末尾のサンプルを
     // 選ばせることで180/180などの末尾待ちを防ぐ。
     const float finalFrameSeekPosition = std::max(
-        0.0f, (static_cast<float>(exportFrameIndex) - 0.5f) /
-                  static_cast<float>(exportTotalFrames));
+        0.0f, (static_cast<float>(exportSourceTotalFrames - 1) - 0.5f) /
+                  static_cast<float>(exportSourceTotalFrames));
     exportVideoPlayer.setPosition(finalFrameSeekPosition);
   } else {
     exportVideoPlayer.nextFrame();
@@ -926,6 +974,7 @@ void ofApp::updateImageSequenceExport() {
 void ofApp::cancelImageSequenceExport() {
   isExportingImageSequence = false;
   exportAwaitingFirstFrame = false;
+  exportDecodedSourceFrame = -1;
   exportFrameWaitStartedAtMillis = 0;
   exportVideoPlayer.close();
   exportScene.reset();
@@ -936,7 +985,7 @@ void ofApp::startMovieExport() {
   const std::string folderName =
       ofFilePath::getFileName(exportOutputDirectory);
   exportMoviePath = ofFilePath::join(
-      exportOutputDirectory, folderName + ".mov");
+      exportMovieDirectory, folderName + ".mov");
 
 #ifdef TARGET_OSX
   exportMovieCodecName = "Apple ProRes 4444 (alpha)";
@@ -947,7 +996,7 @@ void ofApp::startMovieExport() {
   isExportingMovie = true;
   pVideoStatusText = "Creating highest-quality MOV (" +
       exportMovieCodecName + ", AVFoundation)...\n" + exportMoviePath;
-  const std::string outputDirectory = exportOutputDirectory;
+  const std::string outputDirectory = exportPngDirectory;
   const std::string outputMoviePath = exportMoviePath;
   const int width = exportWidth;
   const int height = exportHeight;

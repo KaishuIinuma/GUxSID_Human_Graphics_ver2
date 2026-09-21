@@ -13,3 +13,7 @@
 /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/bin/GUxSID_Human_Graphics.app
 /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/bin/GUxSID_Human_Graphics.app
 /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/bin/GUxSID_Human_Graphics.app
+/Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/bin/GUxSID_Human_Graphics.app
+/Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/bin/GUxSID_Human_Graphics.app
+/Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/bin/GUxSID_Human_Graphics.app
+/Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/bin/GUxSID_Human_Graphics.app

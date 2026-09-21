@@ -308,10 +308,17 @@ public:
   bool isExportingMovie = false;
   int exportFrameIndex = 0;
   int exportTotalFrames = 0;
+  int exportSourceTotalFrames = 0;
+  int exportDecodedSourceFrame = -1;
   int exportWidth = 0;
   int exportHeight = 0;
   double exportFrameRate = 30.0;
+  double exportSourceFrameRate = 30.0;
+  float exportTimelineStartSeconds = 0.0f;
+  HumanContourData exportDecodedData;
   std::string exportOutputDirectory;
+  std::string exportPngDirectory;
+  std::string exportMovieDirectory;
   std::string exportMoviePath;
   std::string exportMovieCodecName;
   std::future<std::string> exportMovieFuture;

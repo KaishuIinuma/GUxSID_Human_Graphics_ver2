@@ -13,8 +13,8 @@ class MaterialAssignmentSystem {
   void update(std::vector<SceneObject>& objects, const ofColor* palette,
               size_t paletteSize, uint64_t updateIntervalMs,
               MaterialType baseMaterialType,
-              MaterialType outlineMaterialType) {
-    const uint64_t now = ofGetElapsedTimeMillis();
+              MaterialType outlineMaterialType,
+              uint64_t now = ofGetElapsedTimeMillis()) {
     const bool objectCountChanged =
         assignedAppearances.size() != objects.size();
     const bool materialTypeChanged =
