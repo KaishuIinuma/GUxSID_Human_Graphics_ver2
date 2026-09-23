@@ -850,10 +850,19 @@ void ofApp::updateImageSequenceExport() {
       static_cast<int>(std::floor(
           static_cast<double>(exportFrameIndex) * exportSourceFrameRate /
           exportFrameRate)));
+  // AVFoundation can stop reporting isFrameNew() near the physical end of a
+  // file even though one output frame remains on the resampled timeline.
+  // Hold the last successfully decoded contours for that final output frame
+  // so the PNG sequence always reaches its declared length and MOV creation
+  // can start.
+  const bool holdDecodedDataForFinalOutput =
+      exportFrameIndex == exportTotalFrames - 1 &&
+      exportDecodedSourceFrame >= 0;
 
   // Target FPSがソースFPSより高い場合は同じデコード結果を複数回使い、
   // 低い場合もAVFoundationへの連続シークを避けて1フレームずつ進める。
-  if (exportDecodedSourceFrame != desiredSourceFrame) {
+  if (exportDecodedSourceFrame != desiredSourceFrame &&
+      !holdDecodedDataForFinalOutput) {
     exportVideoPlayer.update();
     if (!exportVideoPlayer.isFrameNew()) {
       constexpr uint64_t kFrameDecodeTimeoutMillis = 10000;

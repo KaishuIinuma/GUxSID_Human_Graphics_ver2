@@ -208,6 +208,10 @@ std::string createProRes4444MovieWithAVFoundation(
                 }
 
                 CGContextClearRect(context, CGRectMake(0, 0, width, height));
+                // Apply the vertical correction required by the exported MOV
+                // path before copying the PNG into its video pixel buffer.
+                CGContextTranslateCTM(context, 0, height);
+                CGContextScaleCTM(context, 1, -1);
                 CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
                 CGContextRelease(context);
                 CGImageRelease(image);
