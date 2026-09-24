@@ -68,8 +68,8 @@ void HumanGraphicsScene::update(const HumanContourData& humanData,
 
   if (compositionUpdated && sceneLayout) {
     gux::LayoutContext layoutContext;
-    layoutContext.canvasWidth = static_cast<float>(ofGetWidth());
-    layoutContext.canvasHeight = static_cast<float>(ofGetHeight());
+    layoutContext.canvasWidth = static_cast<float>(activeCanvasWidth());
+    layoutContext.canvasHeight = static_cast<float>(activeCanvasHeight());
     sceneLayout->apply(sceneObjects, layoutContext);
   }
 
@@ -98,6 +98,20 @@ void HumanGraphicsScene::draw() {
 void HumanGraphicsScene::draw(bool drawBackground) {
   if (drawBackground) ofBackground(ofApp::background_color);
   if (renderRecipe) renderRecipe->draw(sceneObjects, renderContext());
+}
+
+void HumanGraphicsScene::setCanvasSize(int width, int height) {
+  canvasWidth = width;
+  canvasHeight = height;
+  hasPipelineSignature = false;
+}
+
+int HumanGraphicsScene::activeCanvasWidth() const {
+  return canvasWidth > 0 ? canvasWidth : ofGetWidth();
+}
+
+int HumanGraphicsScene::activeCanvasHeight() const {
+  return canvasHeight > 0 ? canvasHeight : ofGetHeight();
 }
 
 void HumanGraphicsScene::setRenderRecipe(const std::string& recipeId) {
@@ -191,8 +205,11 @@ uint64_t HumanGraphicsScene::pipelineSignature(
   hashCombine(signature, std::hash<bool>{}(enableBase));
   hashCombine(signature, std::hash<bool>{}(enableOffset));
   hashCombine(signature, std::hash<bool>{}(enableStroke));
+  hashCombine(signature, std::hash<bool>{}(enableLooseContour));
+  hashCombine(signature, std::hash<float>{}(looseContourStrength));
   hashCombine(signature, std::hash<float>{}(offsetSize));
   hashCombine(signature, std::hash<float>{}(offsetScale));
+  hashCombine(signature, std::hash<float>{}(aspectRatioPercent));
   hashCombine(signature,
               std::hash<int>{}(static_cast<int>(offsetJoinType)));
   hashCombine(signature, std::hash<float>{}(strokeWeight));
@@ -207,17 +224,20 @@ uint64_t HumanGraphicsScene::pipelineSignature(
               std::hash<float>{}(ofApp::compositionStrokeMergeApproximationPx));
   hashCombine(signature,
               std::hash<size_t>{}(ofApp::compositionStrokeMergeMaxVertices));
-  hashCombine(signature, std::hash<int>{}(ofGetWidth()));
-  hashCombine(signature, std::hash<int>{}(ofGetHeight()));
+  hashCombine(signature, std::hash<int>{}(activeCanvasWidth()));
+  hashCombine(signature, std::hash<int>{}(activeCanvasHeight()));
   return signature;
 }
 
 gux::GeometrySettings HumanGraphicsScene::geometrySettings() const {
   gux::GeometrySettings settings;
   settings.vertexCount = ofApp::vertexCount;
+  settings.enableLooseContour = enableLooseContour;
+  settings.looseContourStrength = looseContourStrength;
   settings.enableOffset = enableOffset;
   settings.offsetSize = offsetSize;
   settings.offsetScale = offsetScale;
+  settings.aspectRatioPercent = aspectRatioPercent;
   settings.offsetJoinType = offsetJoinType;
   return settings;
 }
@@ -245,8 +265,8 @@ gux::CompositionSettings HumanGraphicsScene::compositionSettings() const {
       ofApp::compositionStrokeMergeApproximationPx;
   settings.strokeMergeMaxVertices = ofApp::compositionStrokeMergeMaxVertices;
   settings.vertexCount = ofApp::vertexCount;
-  settings.canvasWidth = ofGetWidth();
-  settings.canvasHeight = ofGetHeight();
+  settings.canvasWidth = activeCanvasWidth();
+  settings.canvasHeight = activeCanvasHeight();
   return settings;
 }
 

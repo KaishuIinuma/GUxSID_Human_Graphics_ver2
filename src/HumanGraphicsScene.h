@@ -26,6 +26,7 @@ class HumanGraphicsScene : public BaseScene {
               float deltaSeconds);
   void draw() override;
   void draw(bool drawBackground);
+  void setCanvasSize(int width, int height);
   void setRenderRecipe(const std::string& recipeId);
   std::string_view renderRecipeId() const;
   void setMergeEvent(const std::string& eventId);
@@ -38,8 +39,11 @@ class HumanGraphicsScene : public BaseScene {
   bool enableBase = true;
   bool enableOffset = true;
   bool enableStroke = true;
+  bool enableLooseContour = false;
+  float looseContourStrength = 7.0f;
   float offsetSize = 200.0f;
   float offsetScale = 1.0f;
+  float aspectRatioPercent = 0.0f;
   OffsetJoinType offsetJoinType = OffsetJoinType::Round;
   float strokeWeight = 10.0f;
   StrokeJoinType strokeJoinType = StrokeJoinType::Round;
@@ -67,7 +71,11 @@ class HumanGraphicsScene : public BaseScene {
   bool hasDetectionSignature = false;
   bool hasPipelineSignature = false;
   bool mergeActive = false;
+  int canvasWidth = 0;
+  int canvasHeight = 0;
 
+  int activeCanvasWidth() const;
+  int activeCanvasHeight() const;
   uint64_t detectionSignature(const HumanContourData& humanData) const;
   uint64_t pipelineSignature(const HumanContourData& humanData) const;
   gux::GeometrySettings geometrySettings() const;

@@ -590,8 +590,8 @@ dependencies: \
   src/geometry/GeometryObject.h src/tracking/TrackedObject.h \
   src/scene/AppearanceComponent.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/geometry/GeometryProcessor.h \
-  src/core/VisualTypes.h src/geometry/OffsetProcessor.h \
-  src/geometry/VertexRemapper.h \
+  src/core/VisualTypes.h src/geometry/LooseContourProcessor.h \
+  src/geometry/OffsetProcessor.h src/geometry/VertexRemapper.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/material/MaterialAssignmentSystem.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/render/MixRenderRecipe.h \
   src/render/BasePass.h src/render/RenderPass.h \

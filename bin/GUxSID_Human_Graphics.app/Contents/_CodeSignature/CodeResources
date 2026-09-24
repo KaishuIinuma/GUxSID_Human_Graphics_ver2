@@ -14,27 +14,27 @@
 		</data>
 		<key>Resources/data/presets/default.json</key>
 		<data>
-		ec6+K/nJJZvrYbfvGrOa3CQi+g8=
+		0G6IbqJ8nNJQBxBB0nZaUxfeF00=
 		</data>
 		<key>Resources/data/presets/fill.json</key>
 		<data>
-		7moM0ktwzFFvrO/gIsMKjkGkcnQ=
+		s3oM6GUKe3FngA3DrBC/fZ9t1Kg=
 		</data>
 		<key>Resources/data/presets/floating_bridge.json</key>
 		<data>
-		9Nhp9bkC0m0+JLcw+06wL9hF80k=
+		9RVuJuRYHS80H1FODFNz+Zx1xCg=
 		</data>
 		<key>Resources/data/presets/mix_render.json</key>
 		<data>
-		bPUmsXbjbqk9FvcpTvRX05RXQkM=
+		EaV3T6gmL63xtF8eqb5fuRqJaGw=
 		</data>
 		<key>Resources/data/presets/stroke.json</key>
 		<data>
-		4Shey91H5XGnalrSBZ/GcEqbShk=
+		PkYDa1xNpbAZ3QRIOs9rmy/bTNM=
 		</data>
 		<key>Resources/data/presets/stroke_copy.json</key>
 		<data>
-		7PbwuC0bYLB67YBigbsokhKyjFE=
+		Kkt7i0M7YS1o7SpbqQanOYTrpPs=
 		</data>
 		<key>Resources/data/selfie_segmentation.onnx</key>
 		<data>
@@ -73,42 +73,42 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			1f9oqUIDaXjg4javhpmOF6IaXmh+gtl4ZcNCBJEYjRk=
+			xX/B8JZelB7bw7e5JDr5ZT+jbzZmtaI/NAHkhjku7Jw=
 			</data>
 		</dict>
 		<key>Resources/data/presets/fill.json</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			ZqOnPfEP9ngDEAX6yqva2n+vY+gptmb87ufmpIGFIjI=
+			MnjQk1V9TeH7F+x5Gx2R4K0p0fr+9fgBN1vzv79AIYE=
 			</data>
 		</dict>
 		<key>Resources/data/presets/floating_bridge.json</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			+TmdSGEJlm6D+fj+cPxz1SDlsJ/uRDAk44B6mvMgq1c=
+			5lSJ7sELTV2F3eTy3PKFV9nrEe5euIbJo9VyF8FahzE=
 			</data>
 		</dict>
 		<key>Resources/data/presets/mix_render.json</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			tdWiXP2KPaTmbvexfHMHTCEGJAakH5RsTqREDQAcT8s=
+			hr6CymoKa3b8QHrqFVq9sijPLczCgofzKAVdDjT7+tg=
 			</data>
 		</dict>
 		<key>Resources/data/presets/stroke.json</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			5oGSFaXzmitLOkykIZXixX8XMhJYQWPLGlWdGHQEfCA=
+			relc16NJ8+YgY9YNipCQdQE8kyPtXPXVFcunyC1NRsM=
 			</data>
 		</dict>
 		<key>Resources/data/presets/stroke_copy.json</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			qR4jtuK5UIeMHKkykhoTkPgMDjWEtJxkJGZpj8J1LG4=
+			Dma/xIQqP4kbfB/QBKcqyFy2CFCxvwvu5rqMiN0m9kg=
 			</data>
 		</dict>
 		<key>Resources/data/selfie_segmentation.onnx</key>

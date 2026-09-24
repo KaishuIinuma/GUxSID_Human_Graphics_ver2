@@ -601,13 +601,13 @@ obj/osx/Debug/src/ofApp.o: \
   src/event/StandardMergeEvent.h src/event/MergeEvent.h \
   src/scene/SceneObject.h src/geometry/GeometryObject.h \
   src/tracking/TrackedObject.h src/scene/AppearanceComponent.h \
-  src/geometry/GeometryProcessor.h src/geometry/OffsetProcessor.h \
-  src/geometry/VertexRemapper.h src/material/MaterialAssignmentSystem.h \
-  src/render/MixRenderRecipe.h src/render/BasePass.h \
-  src/render/RenderPass.h src/render/RenderContext.h \
-  src/material/MaterialPainter.h src/render/ShapePainter.h \
-  src/render/RenderRecipe.h src/render/StrokePass.h \
-  src/render/FloatingBridgeRenderRecipe.h \
+  src/geometry/GeometryProcessor.h src/geometry/LooseContourProcessor.h \
+  src/geometry/OffsetProcessor.h src/geometry/VertexRemapper.h \
+  src/material/MaterialAssignmentSystem.h src/render/MixRenderRecipe.h \
+  src/render/BasePass.h src/render/RenderPass.h \
+  src/render/RenderContext.h src/material/MaterialPainter.h \
+  src/render/ShapePainter.h src/render/RenderRecipe.h \
+  src/render/StrokePass.h src/render/FloatingBridgeRenderRecipe.h \
   src/render/StandardRenderRecipe.h src/scene/FloatingSceneBehavior.h \
   src/scene/SceneBehavior.h src/scene/SceneComposer.h \
   src/scene/StandardSceneBehavior.h src/scene/StandardSceneLayout.h \
@@ -1223,6 +1223,7 @@ src/geometry/GeometryObject.h:
 src/tracking/TrackedObject.h:
 src/scene/AppearanceComponent.h:
 src/geometry/GeometryProcessor.h:
+src/geometry/LooseContourProcessor.h:
 src/geometry/OffsetProcessor.h:
 src/geometry/VertexRemapper.h:
 src/material/MaterialAssignmentSystem.h:

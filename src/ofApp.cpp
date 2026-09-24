@@ -18,6 +18,16 @@ std::string settingsDirectoryPath() {
   return ofFilePath::join(ofFilePath::getUserHomeDir(), kSettingsDirectoryName);
 }
 
+void migrateLegacyScaleKey(ofJson& settings) {
+  if (!settings.is_object()) return;
+  auto controls = settings.find("ControlsSettings");
+  if (controls == settings.end() || !controls->is_object()) return;
+  const auto legacy = controls->find("Graphics_Offset_Scale");
+  if (legacy != controls->end() && controls->find("Scale") == controls->end()) {
+    (*controls)["Scale"] = *legacy;
+  }
+}
+
 void configureBundledDataPath() {
 #ifdef TARGET_OSX
   const of::filesystem::path executablePath =
@@ -143,6 +153,9 @@ void ofApp::setupGuiParameters() {
   pContourThreshold.set("Person Confidence", personSegmenter.confThreshold, 0.0f, 1.0f);
 
   pVertexCount.set("Vertex Count", vertexCount, 4, 100);
+  pLooseContour.set("Loose Contour", false);
+  pLooseContourStrength.set("Loose Contour Strength", 7.0f, 0.0f, 30.0f);
+  pAspectRatio.set("Aspect Ratio", 0.0f, -50.0f, 50.0f);
   pColorUpdateIntervalSec.set("Color Update Interval (s)", static_cast<float>(colorUpdateIntervalMs) / 1000.0f, 0.0f, 20.0f);
  
 
@@ -150,7 +163,7 @@ void ofApp::setupGuiParameters() {
   pGraphicsEnableOffset.set("Graphics Offset Enable", true);
   pGraphicsEnableStroke.set("Graphics Stroke Enable", true);
   pGraphicsOffsetSize.set("Graphics Offset Size", 200.0f, 0.0f, 600.0f);
-  pGraphicsOffsetScale.set("Graphics Offset Scale", 1.0f, 0.1f, 2.0f); // ★追加: 0.1(10%)〜2.0(200%)で調整
+  pGraphicsOffsetScale.set("Scale", 1.0f, 0.1f, 2.0f);
   pGraphicsOffsetRound.set("Graphics Offset Round Mode", true);
   pGraphicsStrokeWeight.set("Graphics Stroke Weight", 10.0f, 0.1f, 200.0f);
   pGraphicsStrokeRound.set("Graphics Stroke Round Mode", true);
@@ -204,6 +217,10 @@ void ofApp::setupGuiParameters() {
   pFlipHorizontal.addListener(this, &ofApp::onFlipHorizontalChanged);
   pContourThreshold.addListener(this, &ofApp::onContourThresholdChanged);
   pVertexCount.addListener(this, &ofApp::onVertexCountChanged);
+  pLooseContour.addListener(this, &ofApp::onLooseContourChanged);
+  pLooseContourStrength.addListener(
+      this, &ofApp::onLooseContourStrengthChanged);
+  pAspectRatio.addListener(this, &ofApp::onAspectRatioChanged);
   pColorUpdateIntervalSec.addListener(this, &ofApp::onColorUpdateIntervalChanged);
 
   pMainWindowTargetFps.addListener(
@@ -232,6 +249,9 @@ void ofApp::setupGuiParameters() {
     humanGraphicsScene->enableBase = pGraphicsEnableBase.get();
     humanGraphicsScene->enableOffset = pGraphicsEnableOffset.get();
     humanGraphicsScene->enableStroke = pGraphicsEnableStroke.get();
+    humanGraphicsScene->enableLooseContour = pLooseContour.get();
+    humanGraphicsScene->looseContourStrength = pLooseContourStrength.get();
+    humanGraphicsScene->aspectRatioPercent = pAspectRatio.get();
     humanGraphicsScene->offsetSize = pGraphicsOffsetSize.get();
     humanGraphicsScene->offsetScale = pGraphicsOffsetScale.get();
     humanGraphicsScene->offsetJoinType = pGraphicsOffsetRound.get()
@@ -261,12 +281,15 @@ void ofApp::setupGuiPersistence() {
   guiParams.add(pFlipHorizontal);
   guiParams.add(pContourThreshold);
   guiParams.add(pVertexCount);
+  guiParams.add(pGraphicsOffsetScale);
+  guiParams.add(pAspectRatio);
+  guiParams.add(pLooseContour);
+  guiParams.add(pLooseContourStrength);
   guiParams.add(pColorUpdateIntervalSec);
   guiParams.add(pGraphicsEnableBase);
   guiParams.add(pGraphicsEnableOffset);
   guiParams.add(pGraphicsEnableStroke);
   guiParams.add(pGraphicsOffsetSize);
-  guiParams.add(pGraphicsOffsetScale);
   guiParams.add(pGraphicsOffsetRound);
   guiParams.add(pGraphicsStrokeWeight);
   guiParams.add(pGraphicsStrokeRound);
@@ -288,12 +311,15 @@ void ofApp::setupGuiPersistence() {
   presetParams.add(pFlipHorizontal);
   presetParams.add(pContourThreshold);
   presetParams.add(pVertexCount);
+  presetParams.add(pGraphicsOffsetScale);
+  presetParams.add(pAspectRatio);
+  presetParams.add(pLooseContour);
+  presetParams.add(pLooseContourStrength);
   presetParams.add(pColorUpdateIntervalSec);
   presetParams.add(pGraphicsEnableBase);
   presetParams.add(pGraphicsEnableOffset);
   presetParams.add(pGraphicsEnableStroke);
   presetParams.add(pGraphicsOffsetSize);
-  presetParams.add(pGraphicsOffsetScale);
   presetParams.add(pGraphicsOffsetRound);
   presetParams.add(pGraphicsStrokeWeight);
   presetParams.add(pGraphicsStrokeRound);
@@ -310,8 +336,9 @@ void ofApp::loadGuiSettings() {
   const auto settingsPath = ofFilePath::join(settingsDirectoryPath(), kControlsFileName);
   if (!ofFile(settingsPath, ofFile::Reference).exists()) return;
 
-  const ofJson settings = ofLoadJson(settingsPath);
+  ofJson settings = ofLoadJson(settingsPath);
   if (settings.is_object()) {
+    migrateLegacyScaleKey(settings);
     isLoadingGuiSettings = true;
     ofDeserialize(settings, guiParams);
     isLoadingGuiSettings = false;
@@ -456,12 +483,13 @@ void ofApp::onPresetIndexChanged(int &index) {
 
   const string presetPath = presetPaths[static_cast<size_t>(index)];
   try {
-    const ofJson preset = ofLoadJson(presetPath);
+    ofJson preset = ofLoadJson(presetPath);
     if (!preset.is_object()) {
       ofLogWarning("ofApp") << "プリセットはJSONオブジェクトである必要があります: " << presetPath;
       return;
     }
 
+    migrateLegacyScaleKey(preset);
     isLoadingGuiSettings = true;
     ofDeserialize(preset, presetParams);
     isLoadingGuiSettings = false;
@@ -513,6 +541,10 @@ void ofApp::rebuildGuiPanel() {
 
   gui.add<float>(pContourThreshold);
   gui.add(pVertexCount);
+  gui.add(pGraphicsOffsetScale);
+  gui.add(pAspectRatio);
+  gui.add(pLooseContour);
+  gui.add(pLooseContourStrength);
   gui.add<float>(pColorUpdateIntervalSec);
 
 
@@ -520,7 +552,6 @@ void ofApp::rebuildGuiPanel() {
   gui.add(pGraphicsEnableOffset);
   gui.add(pGraphicsEnableStroke);
   gui.add<float>(pGraphicsOffsetSize);
-  gui.add<float>(pGraphicsOffsetScale);
   gui.add(pGraphicsOffsetRound);
   gui.add<float>(pGraphicsStrokeWeight);
   gui.add(pGraphicsStrokeRound);
@@ -587,6 +618,24 @@ void ofApp::onContourThresholdChanged(float &value) {
 //--------------------------------------------------------------
 void ofApp::onVertexCountChanged(int &value) {
   vertexCount = value;
+  saveGuiSettings();
+}
+
+//--------------------------------------------------------------
+void ofApp::onLooseContourChanged(bool &value) {
+  if (humanGraphicsScene) humanGraphicsScene->enableLooseContour = value;
+  saveGuiSettings();
+}
+
+//--------------------------------------------------------------
+void ofApp::onLooseContourStrengthChanged(float &value) {
+  if (humanGraphicsScene) humanGraphicsScene->looseContourStrength = value;
+  saveGuiSettings();
+}
+
+//--------------------------------------------------------------
+void ofApp::onAspectRatioChanged(float &value) {
+  if (humanGraphicsScene) humanGraphicsScene->aspectRatioPercent = value;
   saveGuiSettings();
 }
 
@@ -768,14 +817,27 @@ void ofApp::startImageSequenceExport() {
     pVideoStatusText = "Export requires a loaded video in Video mode";
     return;
   }
+  if (!mainWindow || !mainWindow->getGLFWWindow()) {
+    pVideoStatusText = "Export requires an open Main Window";
+    return;
+  }
+
+  // Mainの描画座標をここで固定する。Controls側から押されても
+  // ofGetWidth()/ofGetHeight() はControlsのサイズを返す可能性がある。
+  exportCanvasWidth = mainWindow->getWidth();
+  exportCanvasHeight = mainWindow->getHeight();
+  if (exportCanvasWidth <= 0 || exportCanvasHeight <= 0) {
+    pVideoStatusText = "Export failed: invalid Main Window size";
+    return;
+  }
 
   if (!exportVideoPlayer.load(videoProcessor.getLoadedFileName())) {
     pVideoStatusText = "Export failed: could not load source video";
     return;
   }
 
-  exportWidth = static_cast<int>(exportVideoPlayer.getWidth());
-  exportHeight = static_cast<int>(exportVideoPlayer.getHeight());
+  exportSourceWidth = static_cast<int>(exportVideoPlayer.getWidth());
+  exportSourceHeight = static_cast<int>(exportVideoPlayer.getHeight());
   exportSourceTotalFrames = exportVideoPlayer.getTotalNumFrames();
   const double sourceDurationSeconds = exportVideoPlayer.getDuration();
   exportSourceFrameRate = sourceDurationSeconds > 0.0
@@ -792,12 +854,38 @@ void ofApp::startImageSequenceExport() {
       ? std::max(1, static_cast<int>(std::llround(
             sourceDurationSeconds * exportFrameRate)))
       : exportSourceTotalFrames;
-  if (exportWidth <= 0 || exportHeight <= 0 ||
+  if (exportSourceWidth <= 0 || exportSourceHeight <= 0 ||
       exportSourceTotalFrames <= 0 || exportTotalFrames <= 0) {
     pVideoStatusText = "Export failed: source video has no frames";
     exportVideoPlayer.close();
     return;
   }
+
+  // Mainの構図・線幅・結合判定はそのままに、描画だけを高解像度化する。
+  // ProRes用に偶数寸法へ切り上げ、幅の端数は左右に均等に置く。
+  exportHeight = std::max(3000, exportCanvasHeight);
+  if (exportHeight % 2 != 0) ++exportHeight;
+  exportScale = static_cast<float>(exportHeight) / exportCanvasHeight;
+  const double evenWidth = std::ceil(
+      static_cast<double>(exportCanvasWidth) * exportScale / 2.0) * 2.0;
+  GLint maxTextureSize = 0;
+  glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
+  if (exportHeight > maxTextureSize || evenWidth > maxTextureSize) {
+    pVideoStatusText = "Export failed: 3000px canvas exceeds GPU texture limit";
+    exportVideoPlayer.close();
+    return;
+  }
+  exportWidth = static_cast<int>(evenWidth);
+  exportOffsetX = 0.5f *
+      (exportWidth - exportCanvasWidth * exportScale);
+
+  exportFbo.allocate(exportWidth, exportHeight, GL_RGBA);
+  if (!exportFbo.isAllocated()) {
+    pVideoStatusText = "Export failed: could not allocate 3000px canvas";
+    exportVideoPlayer.close();
+    return;
+  }
+  exportPixels.allocate(exportWidth, exportHeight, OF_PIXELS_RGBA);
 
   const auto exportRoot = ofFilePath::join(
       ofFilePath::getUserHomeDir(), "Movies/GUxSID_Human_Graphics");
@@ -814,14 +902,12 @@ void ofApp::startImageSequenceExport() {
     return;
   }
 
-  exportColorImg.allocate(exportWidth, exportHeight);
-  exportFbo.allocate(exportWidth, exportHeight, GL_RGBA);
-  exportPixels.allocate(exportWidth, exportHeight, OF_PIXELS_RGBA);
   exportAlpha = pExportAlpha.get();
 
   // Mainの描画用Sceneとは別インスタンスを使うため、書き出し中も
   // Main Windowのループ再生と色・輪郭の状態を維持できる。
   exportScene = std::make_shared<HumanGraphicsScene>(*humanGraphicsScene);
+  exportScene->setCanvasSize(exportCanvasWidth, exportCanvasHeight);
   // 浮遊Behaviorは時系列状態を持つため、Main側とは独立した状態で書き出す。
   exportScene->setSceneBehavior(
       std::string(humanGraphicsScene->sceneBehaviorId()));
@@ -901,14 +987,14 @@ void ofApp::updateImageSequenceExport() {
     cv::Mat rgbMat;
     const int channels = framePixels.getNumChannels();
     if (channels == 4) {
-      cv::Mat rgbaMat(exportHeight, exportWidth, CV_8UC4,
+      cv::Mat rgbaMat(exportSourceHeight, exportSourceWidth, CV_8UC4,
                       const_cast<unsigned char*>(framePixels.getData()));
       cv::cvtColor(rgbaMat, rgbMat, cv::COLOR_RGBA2RGB);
     } else if (channels == 3) {
-      rgbMat = cv::Mat(exportHeight, exportWidth, CV_8UC3,
+      rgbMat = cv::Mat(exportSourceHeight, exportSourceWidth, CV_8UC3,
                        const_cast<unsigned char*>(framePixels.getData()));
     } else if (channels == 1) {
-      cv::Mat grayMat(exportHeight, exportWidth, CV_8UC1,
+      cv::Mat grayMat(exportSourceHeight, exportSourceWidth, CV_8UC1,
                       const_cast<unsigned char*>(framePixels.getData()));
       cv::cvtColor(grayMat, rgbMat, cv::COLOR_GRAY2RGB);
     } else {
@@ -917,7 +1003,7 @@ void ofApp::updateImageSequenceExport() {
       return;
     }
     exportDecodedData = personSegmenter.detect(
-        rgbMat, exportWidth, exportHeight);
+        rgbMat, exportCanvasWidth, exportCanvasHeight);
   }
 
   const float exportElapsedSeconds = exportTimelineStartSeconds +
@@ -931,7 +1017,11 @@ void ofApp::updateImageSequenceExport() {
     ofClear(ofApp::background_color, ofApp::background_color,
             ofApp::background_color, 255);
   }
-  exportScene->draw(!exportAlpha);
+  ofPushMatrix();
+  ofTranslate(exportOffsetX, 0.0f);
+  ofScale(exportScale, exportScale);
+  exportScene->draw(false);
+  ofPopMatrix();
   exportFbo.end();
 
   exportFbo.readToPixels(exportPixels);

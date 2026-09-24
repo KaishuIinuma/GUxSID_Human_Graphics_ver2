@@ -171,6 +171,9 @@ public:
   //   実体は personSegmenter.confThreshold (0.0〜1.0)。
   ofParameter<float> pContourThreshold; // YOLO 人物信頼度のしきい値 0.0〜1.0
   ofParameter<int> pVertexCount;        // 頂点数 4〜100
+  ofParameter<bool> pLooseContour;       // 安定した緩い輪郭
+  ofParameter<float> pLooseContourStrength; // 輪郭変形幅。人物幅に対する割合(%)
+  ofParameter<float> pAspectRatio; // 各オブジェクトの縦横比の変化率(%)
   ofParameter<float> pColorUpdateIntervalSec; // 色の更新頻度(秒) 0〜20
 
   ofParameter<bool> pGraphicsEnableBase;   // ベース描画のON/OFF
@@ -236,6 +239,9 @@ public:
   void updateControlsMetrics();
   void onContourThresholdChanged(float &value);
   void onVertexCountChanged(int &value);
+  void onLooseContourChanged(bool &value);
+  void onLooseContourStrengthChanged(float &value);
+  void onAspectRatioChanged(float &value);
   void onColorUpdateIntervalChanged(float &value);
   void onScene2OffsetChanged(float &value);
   void onScene3StrokeWeightChanged(float &value);
@@ -310,8 +316,14 @@ public:
   int exportTotalFrames = 0;
   int exportSourceTotalFrames = 0;
   int exportDecodedSourceFrame = -1;
+  int exportSourceWidth = 0;
+  int exportSourceHeight = 0;
+  int exportCanvasWidth = 0;
+  int exportCanvasHeight = 0;
   int exportWidth = 0;
   int exportHeight = 0;
+  float exportScale = 1.0f;
+  float exportOffsetX = 0.0f;
   double exportFrameRate = 30.0;
   double exportSourceFrameRate = 30.0;
   float exportTimelineStartSeconds = 0.0f;
@@ -323,7 +335,6 @@ public:
   std::string exportMovieCodecName;
   std::future<std::string> exportMovieFuture;
   ofVideoPlayer exportVideoPlayer;
-  ofxCvColorImage exportColorImg;
   ofFbo exportFbo;
   ofPixels exportPixels;
   std::shared_ptr<HumanGraphicsScene> exportScene;
