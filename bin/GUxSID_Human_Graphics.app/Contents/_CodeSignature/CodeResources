@@ -28,13 +28,13 @@
 		<data>
 		EaV3T6gmL63xtF8eqb5fuRqJaGw=
 		</data>
-		<key>Resources/data/presets/stroke.json</key>
+		<key>Resources/data/presets/stroke_Poly.json</key>
+		<data>
+		Ozi3uScTYk0b9mkl1tLp6G0BRxA=
+		</data>
+		<key>Resources/data/presets/stroke_Round.json</key>
 		<data>
 		PkYDa1xNpbAZ3QRIOs9rmy/bTNM=
-		</data>
-		<key>Resources/data/presets/stroke_copy.json</key>
-		<data>
-		Kkt7i0M7YS1o7SpbqQanOYTrpPs=
 		</data>
 		<key>Resources/data/selfie_segmentation.onnx</key>
 		<data>
@@ -97,18 +97,18 @@
 			hr6CymoKa3b8QHrqFVq9sijPLczCgofzKAVdDjT7+tg=
 			</data>
 		</dict>
-		<key>Resources/data/presets/stroke.json</key>
+		<key>Resources/data/presets/stroke_Poly.json</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			a1WhgbWt5fHpVGMU+zuY4y6cwj8gryS9z1Xq0Wb5uhA=
+			</data>
+		</dict>
+		<key>Resources/data/presets/stroke_Round.json</key>
 		<dict>
 			<key>hash2</key>
 			<data>
 			relc16NJ8+YgY9YNipCQdQE8kyPtXPXVFcunyC1NRsM=
-			</data>
-		</dict>
-		<key>Resources/data/presets/stroke_copy.json</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			Dma/xIQqP4kbfB/QBKcqyFy2CFCxvwvu5rqMiN0m9kg=
 			</data>
 		</dict>
 		<key>Resources/data/selfie_segmentation.onnx</key>

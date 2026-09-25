@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<Controls>
+	<Contour_Threshold>0.1</Contour_Threshold>
+	<Vertex_Count>14</Vertex_Count>
+	<Color_Update_Interval__s_>10</Color_Update_Interval__s_>
+	<Scene2_Offset_Amount>0</Scene2_Offset_Amount>
+	<Realtime>0</Realtime>
+	<Camera_ID>0</Camera_ID>
+	<Camera_Name>EOS Webcam Utility</Camera_Name>
+	<Flip_Horizontal>0</Flip_Horizontal>
+	<Graphics_Base_Enable>0</Graphics_Base_Enable>
+	<Graphics_Offset_Enable>1</Graphics_Offset_Enable>
+	<Graphics_Stroke_Enable>1</Graphics_Stroke_Enable>
+	<Graphics_Offset_Size>68.5714</Graphics_Offset_Size>
+	<Graphics_Offset_Scale>0.537679</Graphics_Offset_Scale>
+	<Graphics_Stroke_Weight>10</Graphics_Stroke_Weight>
+	<Graphics_Stroke_Round_Mode>1</Graphics_Stroke_Round_Mode>
+	<Recovery_Status>WARNING: Previous run crashed. Parameters were reset to defaults.</Recovery_Status>
+	<Preset_ID>1</Preset_ID>
+	<Preset_Name>stroke.json</Preset_Name>
+	<Person_Confidence>0.792857</Person_Confidence>
+	<Graphics_Offset_Round_Mode>1</Graphics_Offset_Round_Mode>
+	<Video_FPS>10</Video_FPS>
+	<Video_Status>再生中: /Users/kaishu/Desktop/8688812-hd_1080_1920_25fps.mp4 (1080x1920)</Video_Status>
+</Controls>

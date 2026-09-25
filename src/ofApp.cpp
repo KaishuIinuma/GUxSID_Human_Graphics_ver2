@@ -254,6 +254,7 @@ void ofApp::setupGuiParameters() {
   realtimeMode = pRealtime.get();
   ofSetFrameRate(pMainWindowTargetFps.get());
   videoProcessor.processFps = static_cast<float>(pMainWindowTargetFps.get());
+  personSegmenter.aspectRatioPercent = pAspectRatio.get();
 
   pCameraIndex.addListener(this, &ofApp::onCameraIndexChanged);
   pRealtime.addListener(this, &ofApp::onRealtimeChanged);
@@ -276,12 +277,14 @@ void ofApp::setupGuiParameters() {
   restartButton.setup("Restart from beginning");
   exportImageSequenceButton.setup("Export Image Sequence");
   savePresetButton.setup("Preset-Save");
+  revertPresetButton.setup("Preset-Revert");
   resetParametersButton.setup("Reset Parameters");
   playButton.addListener(this, &ofApp::onPlayPressed);
   pauseButton.addListener(this, &ofApp::onPausePressed);
   restartButton.addListener(this, &ofApp::onRestartPressed);
   exportImageSequenceButton.addListener(this, &ofApp::onExportImageSequencePressed);
   savePresetButton.addListener(this, &ofApp::onSavePresetPressed);
+  revertPresetButton.addListener(this, &ofApp::onRevertPresetPressed);
   resetParametersButton.addListener(this, &ofApp::onResetParametersPressed);
 
   // 保存済みの値を、GUI以外の実行状態にも反映する。
@@ -296,7 +299,6 @@ void ofApp::setupGuiParameters() {
     humanGraphicsScene->enableStroke = pGraphicsEnableStroke.get();
     humanGraphicsScene->enableLooseContour = pLooseContour.get();
     humanGraphicsScene->looseContourStrength = pLooseContourStrength.get();
-    humanGraphicsScene->aspectRatioPercent = pAspectRatio.get();
     humanGraphicsScene->offsetSize = pGraphicsOffsetSize.get();
     humanGraphicsScene->offsetScale = pGraphicsOffsetScale.get();
     humanGraphicsScene->offsetJoinType = pGraphicsOffsetRound.get()
@@ -374,6 +376,13 @@ void ofApp::setupGuiPersistence() {
   presetParams.add(pMergeEventId);
   presetParams.add(pSceneLayoutId);
   presetParams.add(pSceneBehaviorId);
+
+  // 読み込んだプリセットとの差分だけを監視する。Preset Nameや入力モードは
+  // presetParamsに含まれないため、保存名の編集中やRealtime切り替えでは
+  // Modified扱いにならない。
+  presetParameterChangedListener =
+      presetParams.parameterChangedE().newListener(
+          [this](ofAbstractParameter &) { updatePresetDirtyState(); });
 }
 
 //--------------------------------------------------------------
@@ -517,6 +526,34 @@ int ofApp::findPresetIndexByFileName(const string &fileName) const {
 }
 
 //--------------------------------------------------------------
+void ofApp::updatePresetDirtyState() {
+  if (isLoadingGuiSettings || !hasLoadedPresetSnapshot) return;
+
+  ofJson currentPreset;
+  ofSerialize(currentPreset, presetParams);
+  const bool isDirtyNow = currentPreset != loadedPresetSnapshot;
+  if (isDirtyNow == presetIsDirty) return;
+
+  presetIsDirty = isDirtyNow;
+  pPresetStatus = presetIsDirty ? "Modified *" : "Preset loaded";
+}
+
+//--------------------------------------------------------------
+void ofApp::captureLoadedPresetSnapshot() {
+  loadedPresetSnapshot = ofJson();
+  ofSerialize(loadedPresetSnapshot, presetParams);
+  hasLoadedPresetSnapshot = true;
+  presetIsDirty = false;
+}
+
+//--------------------------------------------------------------
+void ofApp::clearLoadedPresetSnapshot() {
+  loadedPresetSnapshot = ofJson();
+  hasLoadedPresetSnapshot = false;
+  presetIsDirty = false;
+}
+
+//--------------------------------------------------------------
 void ofApp::resetGuiParametersToDefaults() {
   isLoadingGuiSettings = true;
   ofDeserialize(defaultGuiSettings, guiParams);
@@ -530,6 +567,7 @@ void ofApp::resetGuiParametersToDefaults() {
   pPresetName = "";
   pPresetStatus = "No preset selected";
   loadedPresetFileName.clear();
+  clearLoadedPresetSnapshot();
 
   rebuildGuiPanel();
   saveGuiSettings();
@@ -538,6 +576,32 @@ void ofApp::resetGuiParametersToDefaults() {
 //--------------------------------------------------------------
 void ofApp::onResetParametersPressed() {
   resetGuiParametersToDefaults();
+}
+
+//--------------------------------------------------------------
+void ofApp::onRevertPresetPressed() {
+  if (!hasLoadedPresetSnapshot || loadedPresetFileName.empty()) {
+    pPresetStatus = "No preset to revert";
+    return;
+  }
+
+  try {
+    isLoadingGuiSettings = true;
+    ofDeserialize(loadedPresetSnapshot, presetParams);
+    isLoadingGuiSettings = false;
+    presetIsDirty = false;
+    pPresetName = loadedPresetFileName;
+    pPresetStatus = "Preset reverted";
+    saveGuiSettings();
+    ofLogNotice("ofApp") << "プリセット読込時の値へ戻しました: "
+                          << loadedPresetFileName;
+  } catch (const std::exception &error) {
+    isLoadingGuiSettings = false;
+    pPresetStatus = "Preset revert failed";
+    ofLogError("ofApp") << "プリセットを元に戻せませんでした: "
+                         << loadedPresetFileName << " (" << error.what()
+                         << ")";
+  }
 }
 
 //--------------------------------------------------------------
@@ -587,6 +651,7 @@ void ofApp::onSavePresetPressed() {
   if (savedIndex >= 0) {
     pPresetIndex.setWithoutEventNotifications(savedIndex);
   }
+  captureLoadedPresetSnapshot();
   pPresetStatus = overwritingLoadedPreset ? "Preset overwritten" : "Preset created";
   rebuildGuiPanel();
   ofLogNotice("ofApp")
@@ -601,6 +666,7 @@ void ofApp::onPresetIndexChanged(int &index) {
     pPresetName = "";
     pPresetStatus = "No preset selected";
     loadedPresetFileName.clear();
+    clearLoadedPresetSnapshot();
     return;
   }
 
@@ -608,6 +674,9 @@ void ofApp::onPresetIndexChanged(int &index) {
   try {
     ofJson preset = ofLoadJson(presetPath);
     if (!preset.is_object()) {
+      loadedPresetFileName.clear();
+      clearLoadedPresetSnapshot();
+      pPresetStatus = "Preset load failed";
       ofLogWarning("ofApp") << "プリセットはJSONオブジェクトである必要があります: " << presetPath;
       return;
     }
@@ -618,12 +687,16 @@ void ofApp::onPresetIndexChanged(int &index) {
     isLoadingGuiSettings = false;
     loadedPresetFileName = ofFilePath::getFileName(presetPath);
     pPresetName = loadedPresetFileName;
+    captureLoadedPresetSnapshot();
     pPresetStatus = "Preset loaded";
     rebuildGuiPanel();
     saveGuiSettings();
     ofLogNotice("ofApp") << "プリセットを読み込みました: " << pPresetName.get();
   } catch (const std::exception &error) {
     isLoadingGuiSettings = false;
+    loadedPresetFileName.clear();
+    clearLoadedPresetSnapshot();
+    pPresetStatus = "Preset load failed";
     ofLogError("ofApp") << "プリセットを読み込めませんでした: " << presetPath
                          << " (" << error.what() << ")";
   }
@@ -655,6 +728,7 @@ void ofApp::rebuildGuiPanel() {
   gui.add(pPresetIndex);
   gui.add(pPresetName);
   gui.add(&savePresetButton);
+  gui.add(&revertPresetButton);
   gui.add(pPresetStatus);
   gui.add(&resetParametersButton);
 
@@ -762,7 +836,10 @@ void ofApp::onLooseContourStrengthChanged(float &value) {
 
 //--------------------------------------------------------------
 void ofApp::onAspectRatioChanged(float &value) {
-  if (humanGraphicsScene) humanGraphicsScene->aspectRatioPercent = value;
+  personSegmenter.aspectRatioPercent = value;
+  // Videoが一時停止中でも、次のupdateで保持中の元フレームから検出し直す。
+  videoProcessor.requestReprocess();
+  lastRealtimeProcessMs = 0;
   saveGuiSettings();
 }
 

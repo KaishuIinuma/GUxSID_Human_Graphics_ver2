@@ -112,6 +112,10 @@ public:
   ofParameter<string> pPresetName;
   ofParameter<string> pPresetStatus;
   string loadedPresetFileName;
+  ofJson loadedPresetSnapshot;
+  bool hasLoadedPresetSnapshot = false;
+  bool presetIsDirty = false;
+  ofEventListener presetParameterChangedListener;
 
   void onCameraIndexChanged(int &index); // カメラIDが変更された時のリスナー
 
@@ -175,7 +179,7 @@ public:
   ofParameter<int> pVertexCount;        // 頂点数 4〜100
   ofParameter<bool> pLooseContour;       // 安定した緩い輪郭
   ofParameter<float> pLooseContourStrength; // 輪郭変形幅。人物幅に対する割合(%)
-  ofParameter<float> pAspectRatio; // 各オブジェクトの縦横比の変化率(%)
+  ofParameter<float> pAspectRatio; // 検出前の元フレームの縦横比変化率(%)
   ofParameter<float> pColorUpdateIntervalSec; // 色の更新頻度(秒) 0〜20
 
   ofParameter<bool> pGraphicsEnableBase;   // ベース描画のON/OFF
@@ -236,6 +240,7 @@ public:
   ofxButton restartButton;
   ofxButton exportImageSequenceButton;
   ofxButton savePresetButton;
+  ofxButton revertPresetButton;
   ofxButton resetParametersButton;
 
   void setupGuiParameters();
@@ -256,6 +261,7 @@ public:
   void onRestartPressed();
   void onExportImageSequencePressed();
   void onSavePresetPressed();
+  void onRevertPresetPressed();
   void onResetParametersPressed();
 
   // Realtime/動画モードの切り替えに応じて、Control Windowの
@@ -284,6 +290,9 @@ public:
   void resetGuiParametersToDefaults();
   void discoverPresetFiles();
   void onPresetIndexChanged(int &index);
+  void updatePresetDirtyState();
+  void captureLoadedPresetSnapshot();
+  void clearLoadedPresetSnapshot();
   int findPresetIndexByFileName(const string &fileName) const;
   int getDefaultCameraIndex() const;
   void beginRunSession();

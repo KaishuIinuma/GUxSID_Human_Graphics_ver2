@@ -1,0 +1,26 @@
+{
+  "ControlsSettings": {
+    "Recipe_ID": "standard_render",
+    "Event_ID": "standard_event",
+    "Layout_ID": "standard_layout",
+    "Behavior_ID": "standard_behavior",
+    "Realtime": "1",
+    "Flip_Horizontal": "0",
+    "Person_Confidence": "0.6",
+    "Vertex_Count": "16",
+    "Loose_Contour": "0",
+    "Loose_Contour_Strength": "7",
+    "Aspect_Ratio": "0",
+    "Color_Update_Interval__s_": "10",
+    "Graphics_Base_Enable": "1",
+    "Graphics_Offset_Enable": "1",
+    "Graphics_Stroke_Enable": "0",
+    "Graphics_Offset_Size": "200",
+    "Scale": "1",
+    "Graphics_Offset_Round_Mode": "1",
+    "Graphics_Stroke_Weight": "10",
+    "Graphics_Stroke_Round_Mode": "1",
+    "Graphics_Base_0:ベタ_1:グラデ": "0",
+    "Graphics_Stroke_0:ベタ_1:グラデ": "0"
+  }
+}

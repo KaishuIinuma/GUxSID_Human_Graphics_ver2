@@ -1,6 +1,7 @@
 #include "PersonSegmenter.h"
 #include <opencv2/imgproc.hpp>
 #include <algorithm>
+#include <cmath>
 
 //--------------------------------------------------------------
 bool PersonSegmenter::loadModel(const std::string &modelPath, int inputSizeArg) {
@@ -60,7 +61,26 @@ HumanContourData PersonSegmenter::detect(const cv::Mat &rgbFrame, int outputWidt
 
   float scale = 1.0f;
   int padX = 0, padY = 0;
-  cv::Mat letterboxed = letterbox(rgbFrame, scale, padX, padY);
+  // 元のRGBフレームを伸縮してからYOLOへ渡す。頂点数調整・Offset・描画の
+  // いずれよりも前に適用する。0%では従来の入力をそのまま使う。
+  cv::Mat stretchedFrame;
+  const cv::Mat* detectionFrame = &rgbFrame;
+  if (aspectRatioPercent != 0.0f) {
+    const float ratio =
+        1.0f + std::clamp(aspectRatioPercent, -50.0f, 50.0f) * 0.01f;
+    const float horizontalScale = std::sqrt(ratio);
+    const float verticalScale = 1.0f / horizontalScale;
+    const float centerX = 0.5f * static_cast<float>(srcW - 1);
+    const float centerY = 0.5f * static_cast<float>(srcH - 1);
+    const cv::Matx23f transform(
+        horizontalScale, 0.0f, (1.0f - horizontalScale) * centerX,
+        0.0f, verticalScale, (1.0f - verticalScale) * centerY);
+    cv::warpAffine(rgbFrame, stretchedFrame, transform, rgbFrame.size(),
+                   cv::INTER_LINEAR, cv::BORDER_CONSTANT,
+                   cv::Scalar(114, 114, 114));
+    detectionFrame = &stretchedFrame;
+  }
+  cv::Mat letterboxed = letterbox(*detectionFrame, scale, padX, padY);
 
   // 0〜1正規化してNCHW形式のblobを作成（入力は既にRGB前提なのでswapRB=false）
   cv::Mat blob = cv::dnn::blobFromImage(

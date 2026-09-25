@@ -58,6 +58,7 @@ public:
   // チューニング用パラメータ（ofApp側のGUIから変更する想定）
   // ============================================
   float confThreshold = 0.6;   // クラス信頼度のしきい値 (0.0〜1.0)
+  float aspectRatioPercent = 0.0f; // 検出前の元フレームの縦横比変化率 (%)
   float nmsThreshold = 0.45f;   // NMS(重複検出除去)のIoUしきい値
   float maskThreshold = 0.5f;   // インスタンスマスクの二値化しきい値
   int personClassId = 0;        // "person"クラスのID（COCO学習済みなら0）

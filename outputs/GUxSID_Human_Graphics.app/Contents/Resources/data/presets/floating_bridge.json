@@ -1,0 +1,21 @@
+{
+  "ControlsSettings": {
+    "Recipe_ID": "floating_bridge_render",
+    "Event_ID": "standard_event",
+    "Layout_ID": "standard_layout",
+    "Behavior_ID": "floating_behavior",
+    "Vertex_Count": "14",
+    "Loose_Contour": "0",
+    "Loose_Contour_Strength": "7",
+    "Aspect_Ratio": "0",
+    "Graphics_Base_Enable": "1",
+    "Graphics_Offset_Enable": "0",
+    "Graphics_Stroke_Enable": "0",
+    "Graphics_Offset_Size": "200",
+    "Scale": "1",
+    "Graphics_Offset_Round_Mode": "1",
+    "Graphics_Stroke_Weight": "10",
+    "Graphics_Stroke_Round_Mode": "1",
+    "Graphics_Base_0:ベタ_1:グラデ": "0"
+  }
+}

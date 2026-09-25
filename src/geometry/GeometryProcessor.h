@@ -7,7 +7,6 @@
 #include "geometry/VertexRemapper.h"
 
 #include <algorithm>
-#include <cmath>
 
 namespace gux {
 
@@ -18,7 +17,6 @@ struct GeometrySettings {
   bool enableOffset = true;
   float offsetSize = 200.0f;
   float offsetScale = 1.0f;
-  float aspectRatioPercent = 0.0f;
   OffsetJoinType offsetJoinType = OffsetJoinType::Round;
 };
 
@@ -49,19 +47,6 @@ class GeometryProcessor {
         const glm::vec3 centroid = polygonCentroid(remapped);
         for (auto& point : target) {
           point = centroid + (point - centroid) * settings.offsetScale;
-        }
-      }
-      if (settings.aspectRatioPercent != 0.0f) {
-        // 縦横比だけを変え、面積は維持する。正で横長、負で縦長。
-        const float ratio =
-            1.0f + std::clamp(settings.aspectRatioPercent, -50.0f, 50.0f) *
-                       0.01f;
-        const float horizontalScale = std::sqrt(ratio);
-        const float verticalScale = 1.0f / horizontalScale;
-        const glm::vec3 centroid = polygonCentroid(remapped);
-        for (auto& point : target) {
-          point.x = centroid.x + (point.x - centroid.x) * horizontalScale;
-          point.y = centroid.y + (point.y - centroid.y) * verticalScale;
         }
       }
       target.setClosed(true);

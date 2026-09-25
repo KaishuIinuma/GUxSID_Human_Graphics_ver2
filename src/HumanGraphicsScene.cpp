@@ -209,7 +209,6 @@ uint64_t HumanGraphicsScene::pipelineSignature(
   hashCombine(signature, std::hash<float>{}(looseContourStrength));
   hashCombine(signature, std::hash<float>{}(offsetSize));
   hashCombine(signature, std::hash<float>{}(offsetScale));
-  hashCombine(signature, std::hash<float>{}(aspectRatioPercent));
   hashCombine(signature,
               std::hash<int>{}(static_cast<int>(offsetJoinType)));
   hashCombine(signature, std::hash<float>{}(strokeWeight));
@@ -237,7 +236,6 @@ gux::GeometrySettings HumanGraphicsScene::geometrySettings() const {
   settings.enableOffset = enableOffset;
   settings.offsetSize = offsetSize;
   settings.offsetScale = offsetScale;
-  settings.aspectRatioPercent = aspectRatioPercent;
   settings.offsetJoinType = offsetJoinType;
   return settings;
 }

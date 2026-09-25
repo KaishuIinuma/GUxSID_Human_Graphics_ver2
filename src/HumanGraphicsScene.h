@@ -43,7 +43,6 @@ class HumanGraphicsScene : public BaseScene {
   float looseContourStrength = 7.0f;
   float offsetSize = 200.0f;
   float offsetScale = 1.0f;
-  float aspectRatioPercent = 0.0f;
   OffsetJoinType offsetJoinType = OffsetJoinType::Round;
   float strokeWeight = 10.0f;
   StrokeJoinType strokeJoinType = StrokeJoinType::Round;

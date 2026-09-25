@@ -33,6 +33,7 @@ public:
   void play();
   void pause();
   void restart();
+  void requestReprocess();
 
   bool isLoaded() const { return loaded; }
   bool isVideoPlaying() const { return playing; }
@@ -68,6 +69,7 @@ private:
   // 最後にセグメンテーションした動画時間上のサンプル番号。
   // 実時間ではなく動画フレームを基準に間引くために使う。
   int64_t lastProcessedSampleIndex = -1;
+  bool reprocessRequested = false;
 
   void allocateBuffers(int w, int h);
   void processCurrentFrame();

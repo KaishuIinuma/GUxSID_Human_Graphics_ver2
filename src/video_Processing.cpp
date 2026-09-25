@@ -67,10 +67,22 @@ void VideoProcessing::restart() {
 }
 
 //--------------------------------------------------------------
+void VideoProcessing::requestReprocess() {
+  reprocessRequested = true;
+}
+
+//--------------------------------------------------------------
 void VideoProcessing::update() {
   if (!loaded) return;
 
   videoPlayer.update();
+
+  if (reprocessRequested && videoPlayer.getPixels().isAllocated()) {
+    reprocessRequested = false;
+    processCurrentFrame();
+    // 再生中は次の新規フレームを通常のサンプル間隔で処理する。
+    return;
+  }
 
   if (!playing) return;
 
