@@ -2,10 +2,12 @@
 #include "CameraAuthorization.h"
 #include <GLFW/glfw3.h> // guiWindow/mainWindowの表示切り替え・リサイズ用
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <iomanip>
+#include <map>
 #include <sstream>
 
 namespace {
@@ -13,9 +15,49 @@ const std::string kSettingsDirectoryName =
     "Library/Application Support/GUxSID_Human_Graphics_ver2";
 const std::string kControlsFileName = "controls.json";
 const std::string kRunningMarkerFileName = "running.marker";
+const std::string kPresetDirectoryName = "presets";
 
 std::string settingsDirectoryPath() {
   return ofFilePath::join(ofFilePath::getUserHomeDir(), kSettingsDirectoryName);
+}
+
+std::string userPresetDirectoryPath() {
+  return ofFilePath::join(settingsDirectoryPath(), kPresetDirectoryName);
+}
+
+std::string lowerCase(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char character) {
+                   return static_cast<char>(std::tolower(character));
+                 });
+  return value;
+}
+
+bool normalizePresetFileName(const std::string &input,
+                             std::string &fileName,
+                             std::string &errorMessage) {
+  fileName = ofTrim(input);
+  if (fileName.empty()) {
+    errorMessage = "Enter a preset name";
+    return false;
+  }
+  if (fileName == "." || fileName == ".." ||
+      fileName.find_first_of("/\\:") != std::string::npos) {
+    errorMessage = "Preset name cannot contain /, \\ or :";
+    return false;
+  }
+
+  const std::string jsonExtension = ".json";
+  if (fileName.size() < jsonExtension.size() ||
+      lowerCase(fileName.substr(fileName.size() - jsonExtension.size())) !=
+          jsonExtension) {
+    fileName += jsonExtension;
+  }
+  if (fileName.size() == jsonExtension.size()) {
+    errorMessage = "Enter a name before .json";
+    return false;
+  }
+  return true;
 }
 
 void migrateLegacyScaleKey(ofJson& settings) {
@@ -145,7 +187,8 @@ void ofApp::setupGuiParameters() {
   discoverPresetFiles();
   pPresetIndex.set("Preset ID", static_cast<int>(presetPaths.size()), 0,
                    static_cast<int>(presetPaths.size()));
-  pPresetName.set("Preset Name", "No preset selected");
+  pPresetName.set("Preset Name", "");
+  pPresetStatus.set("Preset Status", "No preset selected");
 
   // ★追加: 左右反転トグル（デフォルトOFF）
   pFlipHorizontal.set("Flip Horizontal", false);
@@ -232,11 +275,13 @@ void ofApp::setupGuiParameters() {
   pauseButton.setup("Pause");
   restartButton.setup("Restart from beginning");
   exportImageSequenceButton.setup("Export Image Sequence");
+  savePresetButton.setup("Preset-Save");
   resetParametersButton.setup("Reset Parameters");
   playButton.addListener(this, &ofApp::onPlayPressed);
   pauseButton.addListener(this, &ofApp::onPausePressed);
   restartButton.addListener(this, &ofApp::onRestartPressed);
   exportImageSequenceButton.addListener(this, &ofApp::onExportImageSequencePressed);
+  savePresetButton.addListener(this, &ofApp::onSavePresetPressed);
   resetParametersButton.addListener(this, &ofApp::onResetParametersPressed);
 
   // 保存済みの値を、GUI以外の実行状態にも反映する。
@@ -435,21 +480,40 @@ void ofApp::endRunSession() {
 void ofApp::discoverPresetFiles() {
   presetPaths.clear();
 
-  // data/presets/ を標準の配置先にし、data/直下のJSONも読み込めるようにする。
+  // 同名の場合は後から走査するユーザー保存版を優先する。
+  // 配布.app内のプリセットは読み取り専用として扱い、GUIから作成したものは
+  // Application Support/presets に保存してアプリ更新後も残す。
   const vector<string> directories = {
       ofToDataPath("presets", true),
       ofToDataPath("", true),
+      userPresetDirectoryPath(),
   };
+  std::map<std::string, std::string> pathsByLowerFileName;
   for (const auto &directoryPath : directories) {
     ofDirectory directory(directoryPath);
     if (!directory.exists()) continue;
     directory.allowExt("json");
     directory.listDir();
     for (const auto &file : directory.getFiles()) {
-      presetPaths.push_back(file.getAbsolutePath());
+      pathsByLowerFileName[lowerCase(file.getFileName())] =
+          file.getAbsolutePath();
     }
   }
+  for (const auto &entry : pathsByLowerFileName) {
+    presetPaths.push_back(entry.second);
+  }
   std::sort(presetPaths.begin(), presetPaths.end());
+}
+
+//--------------------------------------------------------------
+int ofApp::findPresetIndexByFileName(const string &fileName) const {
+  const string targetName = lowerCase(fileName);
+  for (size_t index = 0; index < presetPaths.size(); ++index) {
+    if (lowerCase(ofFilePath::getFileName(presetPaths[index])) == targetName) {
+      return static_cast<int>(index);
+    }
+  }
+  return -1;
 }
 
 //--------------------------------------------------------------
@@ -463,7 +527,9 @@ void ofApp::resetGuiParametersToDefaults() {
   pCameraIndex = defaultCameraIndex;
   onCameraIndexChanged(defaultCameraIndex);
   pPresetIndex = static_cast<int>(presetPaths.size());
-  pPresetName = "No preset selected";
+  pPresetName = "";
+  pPresetStatus = "No preset selected";
+  loadedPresetFileName.clear();
 
   rebuildGuiPanel();
   saveGuiSettings();
@@ -475,9 +541,66 @@ void ofApp::onResetParametersPressed() {
 }
 
 //--------------------------------------------------------------
+void ofApp::onSavePresetPressed() {
+  string fileName;
+  string validationError;
+  if (!normalizePresetFileName(pPresetName.get(), fileName, validationError)) {
+    pPresetStatus = validationError;
+    ofLogWarning("ofApp") << "プリセットを保存できません: " << validationError;
+    return;
+  }
+
+  const int existingIndex = findPresetIndexByFileName(fileName);
+  const bool overwritingLoadedPreset =
+      !loadedPresetFileName.empty() &&
+      lowerCase(fileName) == lowerCase(loadedPresetFileName);
+  if (existingIndex >= 0 && !overwritingLoadedPreset) {
+    pPresetStatus = "Name already exists - load it before overwrite";
+    ofLogWarning("ofApp")
+        << "同名プリセットが既にあります。上書きするには先に読み込んでください: "
+        << fileName;
+    return;
+  }
+
+  const string presetDirectory = userPresetDirectoryPath();
+  if (!ofDirectory::createDirectory(presetDirectory, false, true)) {
+    pPresetStatus = "Could not create preset folder";
+    ofLogError("ofApp") << "プリセット保存先を作成できませんでした: "
+                         << presetDirectory;
+    return;
+  }
+
+  ofJson preset;
+  ofSerialize(preset, presetParams);
+  const string presetPath = ofFilePath::join(presetDirectory, fileName);
+  if (!ofSavePrettyJson(presetPath, preset)) {
+    pPresetStatus = "Preset save failed";
+    ofLogError("ofApp") << "プリセットを保存できませんでした: " << presetPath;
+    return;
+  }
+
+  loadedPresetFileName = fileName;
+  pPresetName = fileName;
+  discoverPresetFiles();
+  pPresetIndex.setMax(static_cast<int>(presetPaths.size()));
+  const int savedIndex = findPresetIndexByFileName(fileName);
+  if (savedIndex >= 0) {
+    pPresetIndex.setWithoutEventNotifications(savedIndex);
+  }
+  pPresetStatus = overwritingLoadedPreset ? "Preset overwritten" : "Preset created";
+  rebuildGuiPanel();
+  ofLogNotice("ofApp")
+      << (overwritingLoadedPreset ? "プリセットを上書きしました: "
+                                  : "プリセットを新規作成しました: ")
+      << presetPath;
+}
+
+//--------------------------------------------------------------
 void ofApp::onPresetIndexChanged(int &index) {
   if (index < 0 || static_cast<size_t>(index) >= presetPaths.size()) {
-    pPresetName = "No preset selected";
+    pPresetName = "";
+    pPresetStatus = "No preset selected";
+    loadedPresetFileName.clear();
     return;
   }
 
@@ -493,7 +616,9 @@ void ofApp::onPresetIndexChanged(int &index) {
     isLoadingGuiSettings = true;
     ofDeserialize(preset, presetParams);
     isLoadingGuiSettings = false;
-    pPresetName = ofFilePath::getFileName(presetPath);
+    loadedPresetFileName = ofFilePath::getFileName(presetPath);
+    pPresetName = loadedPresetFileName;
+    pPresetStatus = "Preset loaded";
     rebuildGuiPanel();
     saveGuiSettings();
     ofLogNotice("ofApp") << "プリセットを読み込みました: " << pPresetName.get();
@@ -529,6 +654,8 @@ void ofApp::rebuildGuiPanel() {
   }
   gui.add(pPresetIndex);
   gui.add(pPresetName);
+  gui.add(&savePresetButton);
+  gui.add(pPresetStatus);
   gui.add(&resetParametersButton);
 
   // ★追加: Realtime(カメラ)モードの時だけカメラ選択UI・左右反転トグルを表示

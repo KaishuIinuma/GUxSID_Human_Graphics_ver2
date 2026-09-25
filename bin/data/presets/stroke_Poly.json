@@ -17,7 +17,7 @@
     "Graphics_Stroke_Enable": "1",
     "Graphics_Offset_Size": "200",
     "Scale": "1",
-    "Graphics_Offset_Round_Mode": "1",
+    "Graphics_Offset_Round_Mode": "0",
     "Graphics_Stroke_Weight": "10",
     "Graphics_Stroke_Round_Mode": "1",
     "Graphics_Base_0:ベタ_1:グラデ": "0",

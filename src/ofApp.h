@@ -85,7 +85,7 @@ public:
   //   縦のサイズは余裕を持たせておくと良い。
   // ============================================
   static inline int controlWindowWidth = 600;
-  static inline int controlWindowHeight = 900;
+  static inline int controlWindowHeight = 990;
 
   static inline ofColor colorPallate[colorPaletteSize] = {
       // ofColor(RGB)
@@ -110,6 +110,8 @@ public:
   vector<string> presetPaths;
   ofParameter<int> pPresetIndex;
   ofParameter<string> pPresetName;
+  ofParameter<string> pPresetStatus;
+  string loadedPresetFileName;
 
   void onCameraIndexChanged(int &index); // カメラIDが変更された時のリスナー
 
@@ -233,6 +235,7 @@ public:
   ofxButton pauseButton;
   ofxButton restartButton;
   ofxButton exportImageSequenceButton;
+  ofxButton savePresetButton;
   ofxButton resetParametersButton;
 
   void setupGuiParameters();
@@ -252,6 +255,7 @@ public:
   void onPausePressed();
   void onRestartPressed();
   void onExportImageSequencePressed();
+  void onSavePresetPressed();
   void onResetParametersPressed();
 
   // Realtime/動画モードの切り替えに応じて、Control Windowの
@@ -280,6 +284,7 @@ public:
   void resetGuiParametersToDefaults();
   void discoverPresetFiles();
   void onPresetIndexChanged(int &index);
+  int findPresetIndexByFileName(const string &fileName) const;
   int getDefaultCameraIndex() const;
   void beginRunSession();
   void endRunSession();
