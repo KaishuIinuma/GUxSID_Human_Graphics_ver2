@@ -173,9 +173,9 @@ public:
   uint64_t lastControlsMetricsUpdateMs = 0;
 
   // 全体設定
-  // ★変更: MediaPipeの二値化しきい値から、YOLOの人物信頼度しきい値に転用。
-  //   実体は personSegmenter.confThreshold (0.0〜1.0)。
-  ofParameter<float> pContourThreshold; // YOLO 人物信頼度のしきい値 0.0〜1.0
+  // YOLOの人物信頼度 / Classicのマスク確率。実体はconfThreshold。
+  ofParameter<float> pContourThreshold;
+  ofParameter<bool> pClassic; // true: 旧Selfie Segmentationモデル
   ofParameter<int> pVertexCount;        // 頂点数 4〜100
   ofParameter<bool> pLooseContour;       // 安定した緩い輪郭
   ofParameter<float> pLooseContourStrength; // 輪郭変形幅。人物幅に対する割合(%)
@@ -246,6 +246,7 @@ public:
   void setupGuiParameters();
   void updateControlsMetrics();
   void onContourThresholdChanged(float &value);
+  void onClassicChanged(bool &value);
   void onVertexCountChanged(int &value);
   void onLooseContourChanged(bool &value);
   void onLooseContourStrengthChanged(float &value);

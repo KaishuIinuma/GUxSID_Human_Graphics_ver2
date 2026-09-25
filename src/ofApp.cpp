@@ -132,6 +132,8 @@ void ofApp::setup() {
     ofLogError() << "YOLOモデルの読み込みに失敗しました。data/に"
                      "yolo11n-seg.onnx を配置しているか確認してください: " << modelPath;
   }
+  personSegmenter.loadClassicModel(
+      ofToDataPath("selfie_segmentation.onnx", true));
 
   // シーンの初期化（まずはscene1をデフォルトに設定）
   
@@ -194,6 +196,7 @@ void ofApp::setupGuiParameters() {
   pFlipHorizontal.set("Flip Horizontal", false);
 
   pContourThreshold.set("Person Confidence", personSegmenter.confThreshold, 0.0f, 1.0f);
+  pClassic.set("Classic", false);
 
   pVertexCount.set("Vertex Count", vertexCount, 4, 100);
   pLooseContour.set("Loose Contour", false);
@@ -255,11 +258,13 @@ void ofApp::setupGuiParameters() {
   ofSetFrameRate(pMainWindowTargetFps.get());
   videoProcessor.processFps = static_cast<float>(pMainWindowTargetFps.get());
   personSegmenter.aspectRatioPercent = pAspectRatio.get();
+  personSegmenter.setClassic(pClassic.get());
 
   pCameraIndex.addListener(this, &ofApp::onCameraIndexChanged);
   pRealtime.addListener(this, &ofApp::onRealtimeChanged);
   pFlipHorizontal.addListener(this, &ofApp::onFlipHorizontalChanged);
   pContourThreshold.addListener(this, &ofApp::onContourThresholdChanged);
+  pClassic.addListener(this, &ofApp::onClassicChanged);
   pVertexCount.addListener(this, &ofApp::onVertexCountChanged);
   pLooseContour.addListener(this, &ofApp::onLooseContourChanged);
   pLooseContourStrength.addListener(
@@ -326,6 +331,7 @@ void ofApp::setupGuiPersistence() {
   guiParams.add(pRealtime);
   guiParams.add(pCameraIndex);
   guiParams.add(pFlipHorizontal);
+  guiParams.add(pClassic);
   guiParams.add(pContourThreshold);
   guiParams.add(pVertexCount);
   guiParams.add(pGraphicsOffsetScale);
@@ -356,6 +362,7 @@ void ofApp::setupGuiPersistence() {
   presetParams.setName("ControlsSettings");
   presetParams.add(pCameraIndex);
   presetParams.add(pFlipHorizontal);
+  presetParams.add(pClassic);
   presetParams.add(pContourThreshold);
   presetParams.add(pVertexCount);
   presetParams.add(pGraphicsOffsetScale);
@@ -740,6 +747,7 @@ void ofApp::rebuildGuiPanel() {
   }
 
 
+  gui.add(pClassic);
   gui.add<float>(pContourThreshold);
   gui.add(pVertexCount);
   gui.add(pGraphicsOffsetScale);
@@ -811,8 +819,24 @@ void ofApp::onExportAlphaChanged(bool &value) {
 
 //--------------------------------------------------------------
 void ofApp::onContourThresholdChanged(float &value) {
-  // ★変更: 2値化しきい値ではなく、YOLOの人物信頼度しきい値として使う
+  // YOLOでは人物信頼度、Classicでは人物マスクの確率しきい値。
   personSegmenter.confThreshold = value;
+  videoProcessor.requestReprocess();
+  lastRealtimeProcessMs = 0;
+  saveGuiSettings();
+}
+
+//--------------------------------------------------------------
+void ofApp::onClassicChanged(bool &value) {
+  personSegmenter.setClassic(value);
+  humanData = HumanContourData();
+  videoProcessor.humanData = HumanContourData();
+  videoProcessor.requestReprocess();
+  lastRealtimeProcessMs = 0;
+  if (!personSegmenter.isLoaded()) {
+    ofLogError("ofApp") << (value ? "Classic" : "YOLO")
+                        << " model is unavailable";
+  }
   saveGuiSettings();
 }
 

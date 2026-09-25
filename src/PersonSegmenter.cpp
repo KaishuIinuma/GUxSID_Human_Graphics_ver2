@@ -27,6 +27,25 @@ bool PersonSegmenter::loadModel(const std::string &modelPath, int inputSizeArg) 
 }
 
 //--------------------------------------------------------------
+bool PersonSegmenter::loadClassicModel(const std::string &modelPath) {
+  try {
+    classicNet = cv::dnn::readNetFromONNX(modelPath);
+    classicNet.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
+    classicNet.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+    classicLoaded = !classicNet.empty();
+  } catch (const cv::Exception &e) {
+    ofLogError("PersonSegmenter") << "Classic model error: " << e.what();
+    classicLoaded = false;
+  }
+  if (classicLoaded) {
+    ofLogNotice("PersonSegmenter") << "Classic model loaded: " << modelPath;
+  } else {
+    ofLogError("PersonSegmenter") << "Classic model failed to load: " << modelPath;
+  }
+  return classicLoaded;
+}
+
+//--------------------------------------------------------------
 cv::Mat PersonSegmenter::letterbox(const cv::Mat &src, float &scale, int &padX, int &padY) const {
   const int srcW = src.cols;
   const int srcH = src.rows;
@@ -52,7 +71,7 @@ cv::Mat PersonSegmenter::letterbox(const cv::Mat &src, float &scale, int &padX, 
 HumanContourData PersonSegmenter::detect(const cv::Mat &rgbFrame, int outputWidth, int outputHeight) {
   HumanContourData result;
 
-  if (!loaded || rgbFrame.empty() || outputWidth <= 0 || outputHeight <= 0) {
+  if (!isLoaded() || rgbFrame.empty() || outputWidth <= 0 || outputHeight <= 0) {
     return result;
   }
 
@@ -79,6 +98,9 @@ HumanContourData PersonSegmenter::detect(const cv::Mat &rgbFrame, int outputWidt
                    cv::INTER_LINEAR, cv::BORDER_CONSTANT,
                    cv::Scalar(114, 114, 114));
     detectionFrame = &stretchedFrame;
+  }
+  if (classic) {
+    return detectClassic(*detectionFrame, outputWidth, outputHeight);
   }
   cv::Mat letterboxed = letterbox(*detectionFrame, scale, padX, padY);
 
@@ -292,6 +314,69 @@ HumanContourData PersonSegmenter::detect(const cv::Mat &rgbFrame, int outputWidt
     result.boundingBoxes.push_back(ofRectangle(bx, by, bw, bh));
   }
 
+  result.numHumans = static_cast<int>(result.contours.size());
+  return result;
+}
+
+//--------------------------------------------------------------
+HumanContourData PersonSegmenter::detectClassic(const cv::Mat &rgbFrame,
+                                                int outputWidth,
+                                                int outputHeight) {
+  HumanContourData result;
+  // selfie_segmentation.onnx: RGB [1,3,256,256] -> alpha [1,1,256,256].
+  // The original MediaPipe graph resizes without letterboxing and uses 0..1 RGB.
+  cv::Mat blob = cv::dnn::blobFromImage(
+      rgbFrame, 1.0 / 255.0, cv::Size(256, 256),
+      cv::Scalar(0, 0, 0), false, false);
+  classicNet.setInput(blob);
+  cv::Mat alpha = classicNet.forward();
+  if (alpha.dims != 4 || alpha.size[0] != 1 || alpha.size[1] != 1 ||
+      alpha.size[2] != 256 || alpha.size[3] != 256 || alpha.type() != CV_32F) {
+    ofLogError("PersonSegmenter") << "Unexpected Classic model output";
+    return result;
+  }
+
+  cv::Mat alpha256(256, 256, CV_32F, alpha.ptr<float>());
+  cv::Mat alphaSource;
+  cv::resize(alpha256, alphaSource, rgbFrame.size(), 0, 0, cv::INTER_LINEAR);
+  cv::Mat mask;
+  cv::threshold(alphaSource, mask, confThreshold, 255.0, cv::THRESH_BINARY);
+  mask.convertTo(mask, CV_8U);
+
+  std::vector<std::vector<cv::Point>> contours;
+  cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+  const float scaleX = static_cast<float>(outputWidth) / rgbFrame.cols;
+  const float scaleY = static_cast<float>(outputHeight) / rgbFrame.rows;
+  for (const auto &contour : contours) {
+    if (contour.size() < 3 ||
+        cv::contourArea(contour) * scaleX * scaleY < minContourArea) {
+      continue;
+    }
+    std::vector<glm::vec2> points;
+    points.reserve(contour.size());
+    ofPolyline poly;
+    for (const auto &point : contour) {
+      glm::vec2 scaled(point.x * scaleX, point.y * scaleY);
+      points.push_back(scaled);
+      poly.addVertex(scaled.x, scaled.y);
+    }
+    poly.close();
+    result.contours.push_back(poly.getSmoothed(2));
+    result.contourPoints.push_back(std::move(points));
+
+    const cv::Moments moments = cv::moments(contour);
+    const cv::Rect bounds = cv::boundingRect(contour);
+    const float centerX = moments.m00 > 0.0
+        ? static_cast<float>(moments.m10 / moments.m00)
+        : bounds.x + bounds.width * 0.5f;
+    const float centerY = moments.m00 > 0.0
+        ? static_cast<float>(moments.m01 / moments.m00)
+        : bounds.y + bounds.height * 0.5f;
+    result.centroids.emplace_back(centerX * scaleX, centerY * scaleY);
+    result.boundingBoxes.emplace_back(bounds.x * scaleX, bounds.y * scaleY,
+                                      bounds.width * scaleX,
+                                      bounds.height * scaleY);
+  }
   result.numHumans = static_cast<int>(result.contours.size());
   return result;
 }

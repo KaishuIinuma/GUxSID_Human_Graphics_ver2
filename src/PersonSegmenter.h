@@ -43,7 +43,10 @@ public:
   // modelPath: ONNXファイルのパス
   // inputSizeArg: モデルの入力解像度（Ultralyticsのデフォルトは640）
   bool loadModel(const std::string &modelPath, int inputSizeArg =64);
-  bool isLoaded() const { return loaded; }
+  bool loadClassicModel(const std::string &modelPath);
+  void setClassic(bool enabled) { classic = enabled; }
+  bool isClassic() const { return classic; }
+  bool isLoaded() const { return classic ? classicLoaded : loaded; }
 
   // rgbFrame: 8UC3のRGB画像（元解像度のまま渡してよい。内部でレターボックスする）
   // outputWidth / outputHeight: 結果の輪郭座標をこの座標系にスケールして返す
@@ -67,8 +70,13 @@ public:
 
 private:
   cv::dnn::Net net;
+  cv::dnn::Net classicNet;
   bool loaded = false;
+  bool classicLoaded = false;
+  bool classic = false;
   int inputSize = 640;
+  HumanContourData detectClassic(const cv::Mat &rgbFrame,
+                                 int outputWidth, int outputHeight);
 
   struct Detection {
     cv::Rect2f box;                // 640入力空間でのバウンディングボックス(x,y,w,h)
