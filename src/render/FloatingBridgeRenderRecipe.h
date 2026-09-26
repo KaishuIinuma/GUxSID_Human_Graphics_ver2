@@ -114,7 +114,7 @@ class FloatingBridgeRenderRecipe final : public RenderRecipe {
     bridge.addVertex(secondEdge.low.x, secondEdge.low.y);
     bridge.setClosed(true);
     shapePainter.drawFill(bridge, context.backgroundColor);
-    shapePainter.drawStroke(bridge, ofColor::black,
+    shapePainter.drawStroke(bridge, ofColor(100, 100, 100),
                             std::max(2.0f, context.strokeWeight * 0.2f),
                             StrokeJoinType::Straight);
   }

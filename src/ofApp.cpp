@@ -716,13 +716,13 @@ void ofApp::rebuildGuiPanel() {
   gui.add(pVertexCount);
   gui.add(pGraphicsOffsetScale);
   gui.add(pAspectRatio);
+  if (!realtimeMode) gui.add(pVideoPlaybackSpeed);
   gui.add(pLooseContour);
   gui.add(pLooseContourStrength);
   gui.add<float>(pColorUpdateIntervalSec);
   if (!realtimeMode) {
     gui.add(pVideoColorLock);
     gui.add(pVideoPeopleCount);
-    gui.add(pVideoPlaybackSpeed);
     if (pVideoPeopleCount.get() == 1) {
       gui.add(pVideoSoloColor);
     }
