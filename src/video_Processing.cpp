@@ -20,6 +20,9 @@ bool VideoProcessing::loadVideo(const std::string &path) {
   videoHeight = videoPlayer.getHeight();
   loadedFileName = path;
 
+  // Videoモードは映像解析・描画専用。動画に含まれる音声は再生しない。
+  videoPlayer.setVolume(0.0f);
+
   allocateBuffers(videoWidth, videoHeight);
 
   // 前の動画の輪郭データが一瞬でも表示されないようクリアしておく
@@ -44,6 +47,7 @@ void VideoProcessing::allocateBuffers(int w, int h) {
 //--------------------------------------------------------------
 void VideoProcessing::play() {
   if (!loaded) return;
+  videoPlayer.setVolume(0.0f);
   videoPlayer.setPaused(false);
   playing = true;
   lastProcessedSampleIndex = -1;
@@ -59,6 +63,7 @@ void VideoProcessing::pause() {
 //--------------------------------------------------------------
 void VideoProcessing::restart() {
   if (!loaded) return;
+  videoPlayer.setVolume(0.0f);
   videoPlayer.setPosition(0.0f);
   videoPlayer.play();
   videoPlayer.setPaused(false);

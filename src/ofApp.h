@@ -188,6 +188,7 @@ public:
   ofParameter<bool> pGraphicsEnableBase;   // ベース描画のON/OFF
   ofParameter<bool> pGraphicsEnableOffset; // オフセット描画のON/OFF
   ofParameter<bool> pGraphicsEnableStroke; // ストローク描画のON/OFF
+  ofParameter<bool> pGraphicsMergeEnable;  // 人物グラフィック結合のON/OFF
   ofParameter<float> pGraphicsOffsetSize;  // オフセットサイズ
   ofParameter<float> pGraphicsOffsetScale;
   ofParameter<bool>
@@ -207,6 +208,7 @@ public:
   void onGraphicsEnableBaseChanged(bool &value);
   void onGraphicsEnableOffsetChanged(bool &value);
   void onGraphicsEnableStrokeChanged(bool &value);
+  void onGraphicsMergeEnableChanged(bool &value);
   void onGraphicsOffsetSizeChanged(float &value);
   void onGraphicsOffsetScaleChanged(float &value);
   void onGraphicsOffsetRoundChanged(bool &value);

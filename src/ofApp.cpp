@@ -226,6 +226,7 @@ void ofApp::setupGuiParameters() {
   pGraphicsEnableBase.set("Graphics Base Enable", true);
   pGraphicsEnableOffset.set("Graphics Offset Enable", true);
   pGraphicsEnableStroke.set("Graphics Stroke Enable", true);
+  pGraphicsMergeEnable.set("Graphics Merge Enable", true);
   pGraphicsOffsetSize.set("Graphics Offset Size", 200.0f, 0.0f, 600.0f);
   pGraphicsOffsetScale.set("Scale", 1.0f, 0.1f, 2.0f);
   pGraphicsOffsetRound.set("Graphics Offset Round Mode", true);
@@ -243,6 +244,7 @@ void ofApp::setupGuiParameters() {
   pGraphicsEnableBase.addListener(this, &ofApp::onGraphicsEnableBaseChanged);
   pGraphicsEnableOffset.addListener(this, &ofApp::onGraphicsEnableOffsetChanged);
   pGraphicsEnableStroke.addListener(this, &ofApp::onGraphicsEnableStrokeChanged);
+  pGraphicsMergeEnable.addListener(this, &ofApp::onGraphicsMergeEnableChanged);
   pGraphicsOffsetSize.addListener(this, &ofApp::onGraphicsOffsetSizeChanged);
   pGraphicsOffsetScale.addListener(this, &ofApp::onGraphicsOffsetScaleChanged); // ★追加
   pGraphicsOffsetRound.addListener(this, &ofApp::onGraphicsOffsetRoundChanged);
@@ -316,6 +318,7 @@ void ofApp::setupGuiParameters() {
     humanGraphicsScene->enableBase = pGraphicsEnableBase.get();
     humanGraphicsScene->enableOffset = pGraphicsEnableOffset.get();
     humanGraphicsScene->enableStroke = pGraphicsEnableStroke.get();
+    humanGraphicsScene->enableMerge = pGraphicsMergeEnable.get();
     humanGraphicsScene->enableLooseContour = pLooseContour.get();
     humanGraphicsScene->looseContourStrength = pLooseContourStrength.get();
     humanGraphicsScene->offsetSize = pGraphicsOffsetSize.get();
@@ -361,6 +364,7 @@ void ofApp::setupGuiPersistence() {
   guiParams.add(pGraphicsEnableBase);
   guiParams.add(pGraphicsEnableOffset);
   guiParams.add(pGraphicsEnableStroke);
+  guiParams.add(pGraphicsMergeEnable);
   guiParams.add(pGraphicsOffsetSize);
   guiParams.add(pGraphicsOffsetRound);
   guiParams.add(pGraphicsStrokeWeight);
@@ -396,6 +400,7 @@ void ofApp::setupGuiPersistence() {
   presetParams.add(pGraphicsEnableBase);
   presetParams.add(pGraphicsEnableOffset);
   presetParams.add(pGraphicsEnableStroke);
+  presetParams.add(pGraphicsMergeEnable);
   presetParams.add(pGraphicsOffsetSize);
   presetParams.add(pGraphicsOffsetRound);
   presetParams.add(pGraphicsStrokeWeight);
@@ -721,6 +726,7 @@ void ofApp::rebuildGuiPanel() {
   gui.add(pGraphicsEnableBase);
   gui.add(pGraphicsEnableOffset);
   gui.add(pGraphicsEnableStroke);
+  gui.add(pGraphicsMergeEnable);
   gui.add<float>(pGraphicsOffsetSize);
   gui.add(pGraphicsOffsetRound);
   gui.add<float>(pGraphicsStrokeWeight);
@@ -932,6 +938,10 @@ void ofApp::onGraphicsOffsetRoundChanged(bool &value) {
 }
 void ofApp::onGraphicsEnableStrokeChanged(bool &value) {
     if (humanGraphicsScene) humanGraphicsScene->enableStroke = value;
+    saveGuiSettings();
+}
+void ofApp::onGraphicsMergeEnableChanged(bool &value) {
+    if (humanGraphicsScene) humanGraphicsScene->enableMerge = value;
     saveGuiSettings();
 }
 void ofApp::onGraphicsOffsetSizeChanged(float &value) {

@@ -40,6 +40,7 @@ class HumanGraphicsScene : public BaseScene {
   bool enableBase = true;
   bool enableOffset = true;
   bool enableStroke = true;
+  bool enableMerge = true;
   bool enableLooseContour = false;
   float looseContourStrength = 7.0f;
   float offsetSize = 200.0f;

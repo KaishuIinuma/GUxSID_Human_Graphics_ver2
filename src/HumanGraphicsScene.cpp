@@ -214,6 +214,7 @@ uint64_t HumanGraphicsScene::pipelineSignature(
   hashCombine(signature, std::hash<bool>{}(enableBase));
   hashCombine(signature, std::hash<bool>{}(enableOffset));
   hashCombine(signature, std::hash<bool>{}(enableStroke));
+  hashCombine(signature, std::hash<bool>{}(enableMerge));
   hashCombine(signature, std::hash<bool>{}(enableLooseContour));
   hashCombine(signature, std::hash<float>{}(looseContourStrength));
   hashCombine(signature, std::hash<float>{}(offsetSize));
@@ -252,7 +253,7 @@ gux::GeometrySettings HumanGraphicsScene::geometrySettings() const {
 gux::CompositionSettings HumanGraphicsScene::compositionSettings() const {
   gux::CompositionSettings settings;
   // 再配置とペア接続では検知順・個体数を保つ必要があるため、事前結合しない。
-  settings.enableMerge =
+  settings.enableMerge = enableMerge &&
       sceneLayoutId() == gux::StandardSceneLayout::LayoutId &&
       sceneBehaviorId() == gux::StandardSceneBehavior::BehaviorId;
   settings.enableBase = enableBase;
