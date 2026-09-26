@@ -238,6 +238,7 @@ public:
   ofxButton playButton;
   ofxButton pauseButton;
   ofxButton restartButton;
+  ofxButton openVideoButton;
   ofxButton exportImageSequenceButton;
   ofxButton savePresetButton;
   ofxButton revertPresetButton;
@@ -264,6 +265,7 @@ public:
   void onPlayPressed();
   void onPausePressed();
   void onRestartPressed();
+  void onOpenVideoPressed();
   void onExportImageSequencePressed();
   void onSavePresetPressed();
   void onRevertPresetPressed();
@@ -277,6 +279,7 @@ public:
 
   // dragEvent / onGuiWindowFileDragged の両方から呼ばれる共通処理
   void handleDroppedFile(const ofDragInfo &dragInfo);
+  void loadVideoFile(const std::string &path);
 
   // 動画のループ再生とは独立して、HumanGraphicsSceneをPNG連番として書き出し、
   // 完了後にAVFoundationでアルファ付きProRes 4444 MOVへ変換する。

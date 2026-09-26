@@ -238,7 +238,7 @@ void ofApp::setupGuiParameters() {
   pSceneLayoutId.addListener(this, &ofApp::onSceneLayoutIdChanged);
   pSceneBehaviorId.addListener(this, &ofApp::onSceneBehaviorIdChanged);
 
-  pVideoStatusText.set("Video Status", "Realtimeをオフにすると、このウィンドウに動画ファイルをドロップできます");
+  pVideoStatusText.set("Video Status", "VideoモードでOpen Videoまたはドラッグから動画を読み込めます");
 
   // 表示状態にかかわらず、すべての操作可能なパラメータを保存対象にする。
   setupGuiPersistence();
@@ -275,12 +275,14 @@ void ofApp::setupGuiParameters() {
   playButton.setup("Play");
   pauseButton.setup("Pause");
   restartButton.setup("Restart from beginning");
+  openVideoButton.setup("Open Video...");
   exportImageSequenceButton.setup("Export Image Sequence");
   savePresetButton.setup("Preset-Save");
   revertPresetButton.setup("Preset-Revert");
   playButton.addListener(this, &ofApp::onPlayPressed);
   pauseButton.addListener(this, &ofApp::onPausePressed);
   restartButton.addListener(this, &ofApp::onRestartPressed);
+  openVideoButton.addListener(this, &ofApp::onOpenVideoPressed);
   exportImageSequenceButton.addListener(this, &ofApp::onExportImageSequencePressed);
   savePresetButton.addListener(this, &ofApp::onSavePresetPressed);
   revertPresetButton.addListener(this, &ofApp::onRevertPresetPressed);
@@ -657,6 +659,7 @@ void ofApp::rebuildGuiPanel() {
   gui.add(pMainWindowTargetFps);
   gui.add(pMainWindowFps);
   gui.add(pRealtime);
+  if (!realtimeMode) gui.add(&openVideoButton);
   gui.add(pPresetIndex);
   gui.add(pPresetName);
   gui.add(&savePresetButton);
@@ -1022,6 +1025,14 @@ void ofApp::onPausePressed() {
 //-------------------------------------------------------------
 void ofApp::onRestartPressed() {
   videoProcessor.restart();
+}
+
+//--------------------------------------------------------------
+void ofApp::onOpenVideoPressed() {
+  if (realtimeMode) return;
+  ofFileDialogResult selection = ofSystemLoadDialog("Open Video");
+  if (!selection.bSuccess) return;
+  loadVideoFile(selection.getPath());
 }
 
 //--------------------------------------------------------------
@@ -1424,8 +1435,11 @@ void ofApp::handleDroppedFile(const ofDragInfo &dragInfo) {
   }
 
   // 複数ファイルがドロップされても、先頭の1件のみを対象にする
-  const std::string &path = dragInfo.files[0];
+  loadVideoFile(dragInfo.files[0]);
+}
 
+//--------------------------------------------------------------
+void ofApp::loadVideoFile(const std::string &path) {
   pVideoStatusText = "読み込み中: " + path;
 
   bool ok = videoProcessor.loadVideo(path);
