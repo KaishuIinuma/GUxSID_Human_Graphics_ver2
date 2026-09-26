@@ -698,8 +698,11 @@ void ofApp::rebuildGuiPanel() {
 
 
   gui.add(pClassic);
-  gui.add<float>(pYoloConfidence);
-  gui.add<float>(pClassicMaskThreshold);
+  if (pClassic.get()) {
+    gui.add<float>(pClassicMaskThreshold);
+  } else {
+    gui.add<float>(pYoloConfidence);
+  }
   gui.add(pVertexCount);
   gui.add(pGraphicsOffsetScale);
   gui.add(pAspectRatio);
@@ -807,6 +810,7 @@ void ofApp::onClassicChanged(bool &value) {
                         << " model is unavailable";
   }
   saveGuiSettings();
+  if (!isLoadingGuiSettings) rebuildGuiPanel();
 }
 
 //--------------------------------------------------------------
