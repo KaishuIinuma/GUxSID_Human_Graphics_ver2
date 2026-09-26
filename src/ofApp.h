@@ -161,8 +161,6 @@ public:
   // プリセット用の設定群。入力モード（Realtime / Video）は含めない。
   ofParameterGroup presetParams;
   bool isLoadingGuiSettings = false;
-  bool previousRunCrashed = false;
-  ofJson defaultGuiSettings;
 
   // Main Windowの動作状況と描画目標FPSをControlsへ表示する。
   // ステータス3種は保存せず、目標FPSだけcontrols.jsonへ保存する。
@@ -231,9 +229,6 @@ public:
   // (ドロップ待ち／読み込み中／再生中のファイル名などを表示)
   ofParameter<string> pVideoStatusText;
 
-  // 前回が異常終了だった場合だけControlsに表示する復旧ステータス。
-  ofParameter<string> pCrashStatusText;
-
   // 再生・一時停止・最初から再生ボタン（動画モード時のみパネルに表示）
   ofxButton playButton;
   ofxButton pauseButton;
@@ -241,7 +236,6 @@ public:
   ofxButton exportImageSequenceButton;
   ofxButton savePresetButton;
   ofxButton revertPresetButton;
-  ofxButton resetParametersButton;
 
   void setupGuiParameters();
   void updateControlsMetrics();
@@ -263,7 +257,6 @@ public:
   void onExportImageSequencePressed();
   void onSavePresetPressed();
   void onRevertPresetPressed();
-  void onResetParametersPressed();
 
   // Realtime/動画モードの切り替えに応じて、Control Windowの
   // パネル構成（表示するウィジェット）を組み直す
@@ -286,9 +279,7 @@ public:
   // GUI設定の永続化と、Controls Windowの表示／再生成（Aキー）
   void setupGuiPersistence();
   void loadGuiSettings();
-  void logSavedGuiSettingsBeforeCrashReset() const;
   void saveGuiSettings() const;
-  void resetGuiParametersToDefaults();
   void discoverPresetFiles();
   void onPresetIndexChanged(int &index);
   void updatePresetDirtyState();
@@ -296,8 +287,6 @@ public:
   void clearLoadedPresetSnapshot();
   int findPresetIndexByFileName(const string &fileName) const;
   int getDefaultCameraIndex() const;
-  void beginRunSession();
-  void endRunSession();
   void showGuiWindow();
   void showMainWindow();
   void onFlipHorizontalChanged(bool &value);

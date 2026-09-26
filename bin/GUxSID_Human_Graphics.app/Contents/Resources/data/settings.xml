@@ -15,7 +15,6 @@
 	<Graphics_Offset_Scale>0.537679</Graphics_Offset_Scale>
 	<Graphics_Stroke_Weight>10</Graphics_Stroke_Weight>
 	<Graphics_Stroke_Round_Mode>1</Graphics_Stroke_Round_Mode>
-	<Recovery_Status>WARNING: Previous run crashed. Parameters were reset to defaults.</Recovery_Status>
 	<Preset_ID>1</Preset_ID>
 	<Preset_Name>stroke.json</Preset_Name>
 	<Person_Confidence>0.792857</Person_Confidence>

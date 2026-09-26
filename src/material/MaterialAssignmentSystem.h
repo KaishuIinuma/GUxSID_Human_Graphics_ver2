@@ -20,7 +20,9 @@ class MaterialAssignmentSystem {
     const bool materialTypeChanged =
         baseMaterialType != lastBaseMaterialType ||
         outlineMaterialType != lastOutlineMaterialType;
-    const bool updateDue = now >= nextUpdateMs;
+    // Color Update Intervalの最大値(20s)では時間経過による再抽選をしない。
+    // 初回割り当てや人数・Material種別の変更には引き続き対応する。
+    const bool updateDue = updateIntervalMs < 20000 && now >= nextUpdateMs;
     const bool shouldReassign =
         objectCountChanged || materialTypeChanged || updateDue;
 

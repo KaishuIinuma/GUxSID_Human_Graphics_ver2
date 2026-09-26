@@ -14,7 +14,6 @@ namespace {
 const std::string kSettingsDirectoryName =
     "Library/Application Support/GUxSID_Human_Graphics_ver2";
 const std::string kControlsFileName = "controls.json";
-const std::string kRunningMarkerFileName = "running.marker";
 const std::string kPresetDirectoryName = "presets";
 
 std::string settingsDirectoryPath() {
@@ -94,9 +93,6 @@ void ofApp::setup() {
   // 配布.appでは、モデル・フォント・プリセットを
   // Contents/Resources/dataから読む。開発ビルドでは従来のbin/dataを使う。
   configureBundledDataPath();
-
-  // 起動直後にマーカーを作成する。初期化途中のクラッシュも次回起動で検知する。
-  beginRunSession();
 
   // ============================================
   // ★追加/修正: カメラデバイスの取得と初期化
@@ -238,19 +234,10 @@ void ofApp::setupGuiParameters() {
   pSceneBehaviorId.addListener(this, &ofApp::onSceneBehaviorIdChanged);
 
   pVideoStatusText.set("Video Status", "Realtimeをオフにすると、このウィンドウに動画ファイルをドロップできます");
-  pCrashStatusText.set(
-      "Recovery Status",
-      "WARNING: Previous run crashed. Parameters were reset to defaults.");
 
   // 表示状態にかかわらず、すべての操作可能なパラメータを保存対象にする。
   setupGuiPersistence();
-  ofSerialize(defaultGuiSettings, guiParams);
-  if (previousRunCrashed) {
-    logSavedGuiSettingsBeforeCrashReset();
-    ofLogWarning("ofApp") << "前回の終了を確認できないため、GUIパラメーターを初期値に戻しました。";
-  } else {
-    loadGuiSettings();
-  }
+  loadGuiSettings();
 
   // 保存済みモードを先に確定し、Video起動時にカメラを開かないようにする。
   // ofParameterのリスナーはこの後で登録するため、ここでは明示的に反映する。
@@ -283,14 +270,12 @@ void ofApp::setupGuiParameters() {
   exportImageSequenceButton.setup("Export Image Sequence");
   savePresetButton.setup("Preset-Save");
   revertPresetButton.setup("Preset-Revert");
-  resetParametersButton.setup("Reset Parameters");
   playButton.addListener(this, &ofApp::onPlayPressed);
   pauseButton.addListener(this, &ofApp::onPausePressed);
   restartButton.addListener(this, &ofApp::onRestartPressed);
   exportImageSequenceButton.addListener(this, &ofApp::onExportImageSequencePressed);
   savePresetButton.addListener(this, &ofApp::onSavePresetPressed);
   revertPresetButton.addListener(this, &ofApp::onRevertPresetPressed);
-  resetParametersButton.addListener(this, &ofApp::onResetParametersPressed);
 
   // 保存済みの値を、GUI以外の実行状態にも反映する。
   int savedCameraIndex = pCameraIndex.get();
@@ -407,30 +392,6 @@ void ofApp::loadGuiSettings() {
 }
 
 //--------------------------------------------------------------
-void ofApp::logSavedGuiSettingsBeforeCrashReset() const {
-  const auto settingsPath =
-      ofFilePath::join(settingsDirectoryPath(), kControlsFileName);
-  if (!ofFile(settingsPath, ofFile::Reference).exists()) {
-    ofLogWarning("ofApp")
-        << "クラッシュ復旧: 前回のGUI設定ファイルは見つかりませんでした: "
-        << settingsPath;
-    return;
-  }
-
-  try {
-    const ofJson savedSettings = ofLoadJson(settingsPath);
-    ofLogWarning("ofApp")
-        << "クラッシュ復旧: 初期値へ戻す前のGUI設定 (" << settingsPath
-        << "):\n"
-        << savedSettings.dump(2);
-  } catch (const std::exception& error) {
-    ofLogError("ofApp")
-        << "クラッシュ復旧: 前回のGUI設定を読み出せませんでした: "
-        << settingsPath << " (" << error.what() << ")";
-  }
-}
-
-//--------------------------------------------------------------
 void ofApp::saveGuiSettings() const {
   if (isLoadingGuiSettings) return;
 
@@ -448,7 +409,6 @@ void ofApp::saveGuiSettings() const {
 //--------------------------------------------------------------
 void ofApp::exit() {
   saveGuiSettings();
-  endRunSession();
 }
 
 //--------------------------------------------------------------
@@ -465,31 +425,6 @@ int ofApp::getDefaultCameraIndex() const {
     }
   }
   return 0;
-}
-
-//--------------------------------------------------------------
-void ofApp::beginRunSession() {
-  const string settingsDirectory = settingsDirectoryPath();
-  ofDirectory::createDirectory(settingsDirectory, false, true);
-  const string markerPath =
-      ofFilePath::join(settingsDirectory, kRunningMarkerFileName);
-  previousRunCrashed = ofFile(markerPath, ofFile::Reference).exists();
-
-  ofJson marker;
-  marker["startedAt"] = ofGetTimestampString("%Y-%m-%dT%H:%M:%S");
-  if (!ofSavePrettyJson(markerPath, marker)) {
-    ofLogError("ofApp") << "実行状態マーカーを保存できませんでした: " << markerPath;
-  }
-}
-
-//--------------------------------------------------------------
-void ofApp::endRunSession() {
-  const string markerPath =
-      ofFilePath::join(settingsDirectoryPath(), kRunningMarkerFileName);
-  if (ofFile(markerPath, ofFile::Reference).exists() &&
-      !ofFile::removeFile(markerPath, false)) {
-    ofLogWarning("ofApp") << "実行状態マーカーを削除できませんでした: " << markerPath;
-  }
 }
 
 //--------------------------------------------------------------
@@ -558,31 +493,6 @@ void ofApp::clearLoadedPresetSnapshot() {
   loadedPresetSnapshot = ofJson();
   hasLoadedPresetSnapshot = false;
   presetIsDirty = false;
-}
-
-//--------------------------------------------------------------
-void ofApp::resetGuiParametersToDefaults() {
-  isLoadingGuiSettings = true;
-  ofDeserialize(defaultGuiSettings, guiParams);
-  isLoadingGuiSettings = false;
-
-  // カメラは保存済みの外部カメラではなく、必ず内蔵カメラへ戻す。
-  int defaultCameraIndex = getDefaultCameraIndex();
-  pCameraIndex = defaultCameraIndex;
-  onCameraIndexChanged(defaultCameraIndex);
-  pPresetIndex = static_cast<int>(presetPaths.size());
-  pPresetName = "";
-  pPresetStatus = "No preset selected";
-  loadedPresetFileName.clear();
-  clearLoadedPresetSnapshot();
-
-  rebuildGuiPanel();
-  saveGuiSettings();
-}
-
-//--------------------------------------------------------------
-void ofApp::onResetParametersPressed() {
-  resetGuiParametersToDefaults();
 }
 
 //--------------------------------------------------------------
@@ -729,15 +639,11 @@ void ofApp::rebuildGuiPanel() {
   gui.add(pMainWindowTargetFps);
   gui.add(pMainWindowFps);
   gui.add(pRealtime);
-  if (previousRunCrashed) {
-    gui.add(pCrashStatusText);
-  }
   gui.add(pPresetIndex);
   gui.add(pPresetName);
   gui.add(&savePresetButton);
   gui.add(&revertPresetButton);
   gui.add(pPresetStatus);
-  gui.add(&resetParametersButton);
 
   // ★追加: Realtime(カメラ)モードの時だけカメラ選択UI・左右反転トグルを表示
   if (realtimeMode) {
