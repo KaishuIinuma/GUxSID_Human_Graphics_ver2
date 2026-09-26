@@ -14,11 +14,11 @@
 		</data>
 		<key>Resources/data/presets/default.json</key>
 		<data>
-		0G6IbqJ8nNJQBxBB0nZaUxfeF00=
+		Xs55o86tx9vbgVrkqWsOKsTobeU=
 		</data>
 		<key>Resources/data/presets/fill.json</key>
 		<data>
-		s3oM6GUKe3FngA3DrBC/fZ9t1Kg=
+		+GCO6dd+oF+adFZz6fU0u8HxYIM=
 		</data>
 		<key>Resources/data/presets/floating_bridge.json</key>
 		<data>
@@ -30,11 +30,11 @@
 		</data>
 		<key>Resources/data/presets/stroke_Poly.json</key>
 		<data>
-		Ozi3uScTYk0b9mkl1tLp6G0BRxA=
+		1orNS5b9MXf16ySAuVlKCIX390Q=
 		</data>
 		<key>Resources/data/presets/stroke_Round.json</key>
 		<data>
-		PkYDa1xNpbAZ3QRIOs9rmy/bTNM=
+		jNilZSDQ+f90pnBLpL4KOsYNhSw=
 		</data>
 		<key>Resources/data/selfie_segmentation.onnx</key>
 		<data>
@@ -42,7 +42,7 @@
 		</data>
 		<key>Resources/data/settings.xml</key>
 		<data>
-		4txQ5cWPUK9fv1WJC3DuZ1kYQ9U=
+		qAeVxsP0KyigYyNYwDs+LV6yZ1Y=
 		</data>
 		<key>Resources/data/yolo11n-seg.onnx</key>
 		<data>
@@ -73,14 +73,14 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			xX/B8JZelB7bw7e5JDr5ZT+jbzZmtaI/NAHkhjku7Jw=
+			q7NgVFCz1MGD4wwbcH7+9NU35Uf15i1P8FD+WAo8Sfc=
 			</data>
 		</dict>
 		<key>Resources/data/presets/fill.json</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			MnjQk1V9TeH7F+x5Gx2R4K0p0fr+9fgBN1vzv79AIYE=
+			HjhyDVSXcQJq8Ai5uRQ/ajn19i+zznQoy25QSFCbBYQ=
 			</data>
 		</dict>
 		<key>Resources/data/presets/floating_bridge.json</key>
@@ -101,14 +101,14 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			a1WhgbWt5fHpVGMU+zuY4y6cwj8gryS9z1Xq0Wb5uhA=
+			h7trggcbHguRztPf2x3oxY6wfMieHVtC1q22eeAogL0=
 			</data>
 		</dict>
 		<key>Resources/data/presets/stroke_Round.json</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			relc16NJ8+YgY9YNipCQdQE8kyPtXPXVFcunyC1NRsM=
+			UWWTAYIWPpK/Tg8lOUEOuCtzmJVMVMLfbjHiNceJQe4=
 			</data>
 		</dict>
 		<key>Resources/data/selfie_segmentation.onnx</key>
@@ -122,7 +122,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			RLd5Rdtf6Fw04tht4oKmEWcbZVoGmutGwcvkwAk9ts0=
+			2tOGDbFzhd8teTQqe1hIFuA7VrCWK4rkuZ2+arcpBKA=
 			</data>
 		</dict>
 		<key>Resources/data/yolo11n-seg.onnx</key>
