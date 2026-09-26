@@ -2,7 +2,8 @@
   "ControlsSettings": {
     "Realtime": "1",
     "Flip_Horizontal": "1",
-    "Person_Confidence": "0.7",
+    "YOLO_Confidence": "0.7",
+    "Classic_Mask_Threshold": "0.7",
     "Vertex_Count": "14",
     "Loose_Contour": "0",
     "Loose_Contour_Strength": "7",

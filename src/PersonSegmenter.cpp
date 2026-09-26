@@ -173,7 +173,7 @@ HumanContourData PersonSegmenter::detect(const cv::Mat &rgbFrame, int outputWidt
       }
     }
 
-    if (bestClass != personClassId || bestScore < confThreshold) {
+    if (bestClass != personClassId || bestScore < yoloConfidenceThreshold) {
       continue;
     }
 
@@ -200,7 +200,8 @@ HumanContourData PersonSegmenter::detect(const cv::Mat &rgbFrame, int outputWidt
   // 2. NMSで重複検出を除去
   // ============================================
   std::vector<int> keepIndices;
-  cv::dnn::NMSBoxes(boxesForNms, scoresForNms, confThreshold, nmsThreshold, keepIndices);
+  cv::dnn::NMSBoxes(boxesForNms, scoresForNms, yoloConfidenceThreshold,
+                    nmsThreshold, keepIndices);
 
   if (static_cast<int>(keepIndices.size()) > maxDetections) {
     std::sort(keepIndices.begin(), keepIndices.end(), [&](int a, int b) {
@@ -215,80 +216,68 @@ HumanContourData PersonSegmenter::detect(const cv::Mat &rgbFrame, int outputWidt
   // 640入力空間 -> 元画像(rgbFrame)空間 -> 出力(output)空間への変換スケール
   const float outScaleX = static_cast<float>(outputWidth) / static_cast<float>(srcW);
   const float outScaleY = static_cast<float>(outputHeight) / static_cast<float>(srcH);
-  const float protoScaleX = static_cast<float>(protoW) / static_cast<float>(inputSize);
-  const float protoScaleY = static_cast<float>(protoH) / static_cast<float>(inputSize);
-
   // ============================================
-  // 3. 検出ごとにマスクを合成し、輪郭を抽出する
+  // 3. Ultralytics process_mask(..., upsample=true) と同じ順序で
+  //    プロトタイプを合成 -> 入力サイズへ拡大 -> logit>0で二値化 -> boxで切る。
+  //    Classicのalphaマスク処理とは独立させる。
   // ============================================
   for (int idx : keepIndices) {
     const Detection &det = candidates[idx];
 
-    // マスク係数 × プロトタイプ -> 低解像度(160x160)マスク
+    // マスク係数 × プロトタイプ -> 低解像度(160x160) logitマスク
     cv::Mat coefMat(1, protoC, CV_32F, const_cast<float *>(det.maskCoeffs.data()));
     cv::Mat maskLowRes = coefMat * protoMat;      // [1, protoH*protoW]
     maskLowRes = maskLowRes.reshape(1, protoH);   // [protoH, protoW]
 
-    // シグモイドで0〜1に正規化
-    cv::Mat maskProb;
-    cv::exp(-maskLowRes, maskProb);
-    maskProb = 1.0 / (1.0 + maskProb);
+    cv::Mat maskUpsampled;
+    cv::resize(maskLowRes, maskUpsampled, cv::Size(inputSize, inputSize),
+               0.0, 0.0, cv::INTER_LINEAR);
 
-    // boxに対応するプロトタイプ空間の矩形を切り出す
-    cv::Rect protoRect(
-        static_cast<int>(det.box.x * protoScaleX),
-        static_cast<int>(det.box.y * protoScaleY),
-        std::max(1, static_cast<int>(det.box.width * protoScaleX)),
-        std::max(1, static_cast<int>(det.box.height * protoScaleY)));
-    protoRect &= cv::Rect(0, 0, protoW, protoH);
-    if (protoRect.width <= 0 || protoRect.height <= 0) continue;
+    // crop_maskと同様に、x1 <= x < x2 / y1 <= y < y2 の整数画素を残す。
+    const int left = std::clamp(static_cast<int>(std::ceil(det.box.x)), 0, inputSize);
+    const int top = std::clamp(static_cast<int>(std::ceil(det.box.y)), 0, inputSize);
+    const int right = std::clamp(
+        static_cast<int>(std::ceil(det.box.x + det.box.width)), 0, inputSize);
+    const int bottom = std::clamp(
+        static_cast<int>(std::ceil(det.box.y + det.box.height)), 0, inputSize);
+    if (right <= left || bottom <= top) continue;
 
-    cv::Mat maskCrop = maskProb(protoRect);
+    cv::Mat maskBinary = cv::Mat::zeros(inputSize, inputSize, CV_8UC1);
+    const cv::Rect maskBox(left, top, right - left, bottom - top);
+    cv::compare(maskUpsampled(maskBox), cv::Scalar(0.0),
+                maskBinary(maskBox), cv::CMP_GT);
 
-    const int boxPixelW = std::max(1, static_cast<int>(std::round(det.box.width)));
-    const int boxPixelH = std::max(1, static_cast<int>(std::round(det.box.height)));
+    std::vector<std::vector<cv::Point>> contours;
+    cv::findContours(maskBinary, contours, cv::RETR_EXTERNAL,
+                     cv::CHAIN_APPROX_SIMPLE);
+    if (contours.empty()) continue;
 
-    cv::Mat maskResized;
-    cv::resize(maskCrop, maskResized, cv::Size(boxPixelW, boxPixelH));
-
-    cv::Mat maskBinary;
-    cv::threshold(maskResized, maskBinary, maskThreshold, 255.0, cv::THRESH_BINARY);
-    maskBinary.convertTo(maskBinary, CV_8UC1);
-
-    // box内ローカル座標で輪郭抽出
-    std::vector<std::vector<cv::Point>> localContours;
-    cv::findContours(maskBinary, localContours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-    if (localContours.empty()) continue;
-
-    // 最も面積の大きい輪郭を採用（マスクのノイズによる小穴を無視するため）
+    // 描画側の1検出=1輪郭という契約に合わせ、最大の連結成分を採用する。
     size_t largestIdx = 0;
     double largestArea = 0.0;
-    for (size_t i = 0; i < localContours.size(); i++) {
-      const double area = cv::contourArea(localContours[i]);
+    for (size_t i = 0; i < contours.size(); i++) {
+      const double area = cv::contourArea(contours[i]);
       if (area > largestArea) {
         largestArea = area;
         largestIdx = i;
       }
     }
 
-    const auto &localContour = localContours[largestIdx];
-    if (localContour.size() < 3) continue;
+    const auto &contour = contours[largestIdx];
+    if (contour.size() < 3) continue;
 
     // 出力空間での面積換算が小さすぎるものはノイズとして除外
     const double outputAreaApprox = largestArea * (outScaleX / scale) * (outScaleY / scale);
     if (outputAreaApprox < minContourArea) continue;
 
-    // ローカル座標(box内) -> 640入力空間 -> 元画像空間 -> 出力空間 へ変換
+    // 640入力空間 -> 元画像空間 -> 出力空間 へ変換
     ofPolyline poly;
     vector<glm::vec2> pts;
-    pts.reserve(localContour.size());
+    pts.reserve(contour.size());
 
-    for (const auto &lp : localContour) {
-      const float x640 = det.box.x + lp.x;
-      const float y640 = det.box.y + lp.y;
-
-      const float xSrc = (x640 - padX) / scale;
-      const float ySrc = (y640 - padY) / scale;
+    for (const auto &point : contour) {
+      const float xSrc = (point.x - padX) / scale;
+      const float ySrc = (point.y - padY) / scale;
 
       glm::vec2 p(xSrc * outScaleX, ySrc * outScaleY);
       poly.addVertex(p.x, p.y);
@@ -340,7 +329,8 @@ HumanContourData PersonSegmenter::detectClassic(const cv::Mat &rgbFrame,
   cv::Mat alphaSource;
   cv::resize(alpha256, alphaSource, rgbFrame.size(), 0, 0, cv::INTER_LINEAR);
   cv::Mat mask;
-  cv::threshold(alphaSource, mask, confThreshold, 255.0, cv::THRESH_BINARY);
+  cv::threshold(alphaSource, mask, classicMaskThreshold, 255.0,
+                cv::THRESH_BINARY);
   mask.convertTo(mask, CV_8U);
 
   std::vector<std::vector<cv::Point>> contours;

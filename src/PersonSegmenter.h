@@ -60,10 +60,10 @@ public:
   // ============================================
   // チューニング用パラメータ（ofApp側のGUIから変更する想定）
   // ============================================
-  float confThreshold = 0.6;   // クラス信頼度のしきい値 (0.0〜1.0)
+  float yoloConfidenceThreshold = 0.25f; // YOLOの人物クラス信頼度
+  float classicMaskThreshold = 0.6f;      // Classicの人物画素確率
   float aspectRatioPercent = 0.0f; // 検出前の元フレームの縦横比変化率 (%)
   float nmsThreshold = 0.45f;   // NMS(重複検出除去)のIoUしきい値
-  float maskThreshold = 0.5f;   // インスタンスマスクの二値化しきい値
   int personClassId = 0;        // "person"クラスのID（COCO学習済みなら0）
   int maxDetections = 20;       // 1フレームあたりの最大検出人数（暴走防止）
   double minContourArea = 500.0; // これより小さい輪郭はノイズとして除外(出力解像度基準)

@@ -70,6 +70,20 @@ void migrateLegacyScaleKey(ofJson& settings) {
   }
 }
 
+void migrateLegacyPersonConfidenceKey(ofJson& settings) {
+  if (!settings.is_object()) return;
+  auto controls = settings.find("ControlsSettings");
+  if (controls == settings.end() || !controls->is_object()) return;
+  const auto legacy = controls->find("Person_Confidence");
+  if (legacy == controls->end()) return;
+  if (controls->find("YOLO_Confidence") == controls->end()) {
+    (*controls)["YOLO_Confidence"] = *legacy;
+  }
+  if (controls->find("Classic_Mask_Threshold") == controls->end()) {
+    (*controls)["Classic_Mask_Threshold"] = *legacy;
+  }
+}
+
 void configureBundledDataPath() {
 #ifdef TARGET_OSX
   const of::filesystem::path executablePath =
@@ -192,7 +206,10 @@ void ofApp::setupGuiParameters() {
   // ★追加: 左右反転トグル（デフォルトOFF）
   pFlipHorizontal.set("Flip Horizontal", false);
 
-  pContourThreshold.set("Person Confidence", personSegmenter.confThreshold, 0.0f, 1.0f);
+  pYoloConfidence.set("YOLO Confidence",
+                      personSegmenter.yoloConfidenceThreshold, 0.0f, 1.0f);
+  pClassicMaskThreshold.set("Classic Mask Threshold",
+                            personSegmenter.classicMaskThreshold, 0.0f, 1.0f);
   pClassic.set("Classic", false);
 
   pVertexCount.set("Vertex Count", vertexCount, 4, 100);
@@ -255,7 +272,8 @@ void ofApp::setupGuiParameters() {
   pCameraIndex.addListener(this, &ofApp::onCameraIndexChanged);
   pRealtime.addListener(this, &ofApp::onRealtimeChanged);
   pFlipHorizontal.addListener(this, &ofApp::onFlipHorizontalChanged);
-  pContourThreshold.addListener(this, &ofApp::onContourThresholdChanged);
+  pYoloConfidence.addListener(this, &ofApp::onYoloConfidenceChanged);
+  pClassicMaskThreshold.addListener(this, &ofApp::onClassicMaskThresholdChanged);
   pClassic.addListener(this, &ofApp::onClassicChanged);
   pVertexCount.addListener(this, &ofApp::onVertexCountChanged);
   pLooseContour.addListener(this, &ofApp::onLooseContourChanged);
@@ -290,7 +308,8 @@ void ofApp::setupGuiParameters() {
   // 保存済みの値を、GUI以外の実行状態にも反映する。
   int savedCameraIndex = pCameraIndex.get();
   onCameraIndexChanged(savedCameraIndex);
-  personSegmenter.confThreshold = pContourThreshold.get();
+  personSegmenter.yoloConfidenceThreshold = pYoloConfidence.get();
+  personSegmenter.classicMaskThreshold = pClassicMaskThreshold.get();
   vertexCount = pVertexCount.get();
   colorUpdateIntervalMs = static_cast<uint64_t>(pColorUpdateIntervalSec.get() * 1000.0f);
   if (humanGraphicsScene) {
@@ -328,7 +347,8 @@ void ofApp::setupGuiPersistence() {
   guiParams.add(pCameraIndex);
   guiParams.add(pFlipHorizontal);
   guiParams.add(pClassic);
-  guiParams.add(pContourThreshold);
+  guiParams.add(pYoloConfidence);
+  guiParams.add(pClassicMaskThreshold);
   guiParams.add(pVertexCount);
   guiParams.add(pGraphicsOffsetScale);
   guiParams.add(pAspectRatio);
@@ -362,7 +382,8 @@ void ofApp::setupGuiPersistence() {
   presetParams.add(pCameraIndex);
   presetParams.add(pFlipHorizontal);
   presetParams.add(pClassic);
-  presetParams.add(pContourThreshold);
+  presetParams.add(pYoloConfidence);
+  presetParams.add(pClassicMaskThreshold);
   presetParams.add(pVertexCount);
   presetParams.add(pGraphicsOffsetScale);
   presetParams.add(pAspectRatio);
@@ -402,6 +423,7 @@ void ofApp::loadGuiSettings() {
   ofJson settings = ofLoadJson(settingsPath);
   if (settings.is_object()) {
     migrateLegacyScaleKey(settings);
+    migrateLegacyPersonConfidenceKey(settings);
     isLoadingGuiSettings = true;
     ofDeserialize(settings, guiParams);
     isLoadingGuiSettings = false;
@@ -618,6 +640,7 @@ void ofApp::onPresetIndexChanged(int &index) {
     }
 
     migrateLegacyScaleKey(preset);
+    migrateLegacyPersonConfidenceKey(preset);
     isLoadingGuiSettings = true;
     ofDeserialize(preset, presetParams);
     isLoadingGuiSettings = false;
@@ -675,7 +698,8 @@ void ofApp::rebuildGuiPanel() {
 
 
   gui.add(pClassic);
-  gui.add<float>(pContourThreshold);
+  gui.add<float>(pYoloConfidence);
+  gui.add<float>(pClassicMaskThreshold);
   gui.add(pVertexCount);
   gui.add(pGraphicsOffsetScale);
   gui.add(pAspectRatio);
@@ -752,11 +776,22 @@ void ofApp::onExportAlphaChanged(bool &value) {
 }
 
 //--------------------------------------------------------------
-void ofApp::onContourThresholdChanged(float &value) {
-  // YOLOでは人物信頼度、Classicでは人物マスクの確率しきい値。
-  personSegmenter.confThreshold = value;
-  videoProcessor.requestReprocess();
-  lastRealtimeProcessMs = 0;
+void ofApp::onYoloConfidenceChanged(float &value) {
+  personSegmenter.yoloConfidenceThreshold = value;
+  if (!personSegmenter.isClassic()) {
+    videoProcessor.requestReprocess();
+    lastRealtimeProcessMs = 0;
+  }
+  saveGuiSettings();
+}
+
+//--------------------------------------------------------------
+void ofApp::onClassicMaskThresholdChanged(float &value) {
+  personSegmenter.classicMaskThreshold = value;
+  if (personSegmenter.isClassic()) {
+    videoProcessor.requestReprocess();
+    lastRealtimeProcessMs = 0;
+  }
   saveGuiSettings();
 }
 
@@ -1736,8 +1771,11 @@ void ofApp::drawDebug() {
   }
 
   // ステータスと操作ガイド
-  string info = "=== [DEBUG MODE] YOLO11-seg Person Detection ===\n";
-  info += "Model: YOLO11-seg (person only)\n";
+  string info = "=== [DEBUG MODE] Person Detection ===\n";
+  info += "Model: " + string(pClassic.get() ? "Classic Selfie" : "YOLO11-seg") + "\n";
+  const float activeThreshold = pClassic.get()
+      ? personSegmenter.classicMaskThreshold
+      : personSegmenter.yoloConfidenceThreshold;
   info += "Mode: " + string(realtimeMode ? "Realtime (Camera)" : "Video File") + "\n";
   if (realtimeMode) {
     info += "Camera initialized: " + string(cam.isInitialized() ? "Yes" : "No") + "\n";
@@ -1745,10 +1783,10 @@ void ofApp::drawDebug() {
             ofToString(colorImg.getHeight()) + "\n";
     info += "AI model loaded: " + string(personSegmenter.isLoaded() ? "Yes" : "No") + "\n";
     info += "Detected People: " + ofToString(humanData.numHumans) + "\n";
-    info += "Confidence: " + ofToString(personSegmenter.confThreshold, 2) + " [UP/DOWN: Adjust]\n";
+    info += "Threshold: " + ofToString(activeThreshold, 2) + " [UP/DOWN: Adjust]\n";
   } else {
     info += "Detected People: " + ofToString(videoProcessor.humanData.numHumans) + "\n";
-    info += "Confidence: " + ofToString(personSegmenter.confThreshold, 2) + " [UP/DOWN: Adjust]\n";
+    info += "Threshold: " + ofToString(activeThreshold, 2) + " [UP/DOWN: Adjust]\n";
     info += "Target FPS: " + ofToString(pMainWindowTargetFps.get()) + "\n";
     info += "Playing: " + string(videoProcessor.isVideoPlaying() ? "Yes" : "No (Paused)") + "\n";
   }
@@ -1779,11 +1817,19 @@ void ofApp::keyPressed(int key) {
   // （GUIのスライダーと同じofParameterを操作するので、
   //   キーで動かすとバー側の表示にも即座に反映される）
   // ============================================
-  // 輪郭の閾値 (UP/DOWN, 0.0〜1.0)
+  // 現在の検出モードの閾値 (UP/DOWN, 0.0〜1.0)
   else if (key == OF_KEY_UP) {
-    pContourThreshold = std::min(1.0f, pContourThreshold.get() + 0.05f);
+    if (pClassic.get()) {
+      pClassicMaskThreshold = std::min(1.0f, pClassicMaskThreshold.get() + 0.05f);
+    } else {
+      pYoloConfidence = std::min(1.0f, pYoloConfidence.get() + 0.05f);
+    }
   } else if (key == OF_KEY_DOWN) {
-    pContourThreshold = std::max(0.0f, pContourThreshold.get() - 0.05f);
+    if (pClassic.get()) {
+      pClassicMaskThreshold = std::max(0.0f, pClassicMaskThreshold.get() - 0.05f);
+    } else {
+      pYoloConfidence = std::max(0.0f, pYoloConfidence.get() - 0.05f);
+    }
   }
   // 頂点数 ('[' / ']', 4〜100)
   else if (key == '[') {

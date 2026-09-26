@@ -171,8 +171,8 @@ public:
   uint64_t lastControlsMetricsUpdateMs = 0;
 
   // 全体設定
-  // YOLOの人物信頼度 / Classicのマスク確率。実体はconfThreshold。
-  ofParameter<float> pContourThreshold;
+  ofParameter<float> pYoloConfidence;
+  ofParameter<float> pClassicMaskThreshold;
   ofParameter<bool> pClassic; // true: 旧Selfie Segmentationモデル
   ofParameter<int> pVertexCount;        // 頂点数 4〜100
   ofParameter<bool> pLooseContour;       // 安定した緩い輪郭
@@ -245,7 +245,8 @@ public:
 
   void setupGuiParameters();
   void updateControlsMetrics();
-  void onContourThresholdChanged(float &value);
+  void onYoloConfidenceChanged(float &value);
+  void onClassicMaskThresholdChanged(float &value);
   void onClassicChanged(bool &value);
   void onVertexCountChanged(int &value);
   void onLooseContourChanged(bool &value);
