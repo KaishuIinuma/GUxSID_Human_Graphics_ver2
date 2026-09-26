@@ -34,6 +34,7 @@ public:
   void pause();
   void restart();
   void requestReprocess();
+  void setPlaybackSpeed(float speed);
 
   bool isLoaded() const { return loaded; }
   bool isVideoPlaying() const { return playing; }
@@ -46,6 +47,9 @@ public:
   // ※動画そのものの再生フレームレートではなく、
   //   「セグメンテーション処理を何fpsで行うか」を決める値。
   float processFps = 30.0f;
+
+  // 動画の再生速度。Controlsから設定し、再生操作後も維持する。
+  float playbackSpeed = 1.0f;
 
   // 出力: 人物輪郭データ（ofApp::humanDataと全く同じ形式）
   // Scene側はこれを渡された humanData と区別せずに使える

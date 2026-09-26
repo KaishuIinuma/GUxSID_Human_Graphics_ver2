@@ -221,6 +221,7 @@ void ofApp::setupGuiParameters() {
   pVideoSoloColor.set("Solo Color", 1, 1,
                       static_cast<int>(colorPaletteSize));
   pVideoColorLock.set("Video Color Lock", false);
+  pVideoPlaybackSpeed.set("Video Playback Speed", 1.0f, 0.1f, 2.0f);
  
 
   pGraphicsEnableBase.set("Graphics Base Enable", true);
@@ -286,6 +287,7 @@ void ofApp::setupGuiParameters() {
   pVideoPeopleCount.addListener(this, &ofApp::onVideoPeopleCountChanged);
   pVideoSoloColor.addListener(this, &ofApp::onVideoSoloColorChanged);
   pVideoColorLock.addListener(this, &ofApp::onVideoColorLockChanged);
+  pVideoPlaybackSpeed.addListener(this, &ofApp::onVideoPlaybackSpeedChanged);
 
   pMainWindowTargetFps.addListener(
       this, &ofApp::onMainWindowTargetFpsChanged);
@@ -314,6 +316,7 @@ void ofApp::setupGuiParameters() {
   personSegmenter.classicMaskThreshold = pClassicMaskThreshold.get();
   vertexCount = pVertexCount.get();
   colorUpdateIntervalMs = static_cast<uint64_t>(pColorUpdateIntervalSec.get() * 1000.0f);
+  videoProcessor.setPlaybackSpeed(pVideoPlaybackSpeed.get());
   if (humanGraphicsScene) {
     humanGraphicsScene->enableBase = pGraphicsEnableBase.get();
     humanGraphicsScene->enableOffset = pGraphicsEnableOffset.get();
@@ -361,6 +364,7 @@ void ofApp::setupGuiPersistence() {
   guiParams.add(pVideoPeopleCount);
   guiParams.add(pVideoSoloColor);
   guiParams.add(pVideoColorLock);
+  guiParams.add(pVideoPlaybackSpeed);
   guiParams.add(pGraphicsEnableBase);
   guiParams.add(pGraphicsEnableOffset);
   guiParams.add(pGraphicsEnableStroke);
@@ -397,6 +401,7 @@ void ofApp::setupGuiPersistence() {
   presetParams.add(pVideoPeopleCount);
   presetParams.add(pVideoSoloColor);
   presetParams.add(pVideoColorLock);
+  presetParams.add(pVideoPlaybackSpeed);
   presetParams.add(pGraphicsEnableBase);
   presetParams.add(pGraphicsEnableOffset);
   presetParams.add(pGraphicsEnableStroke);
@@ -717,6 +722,7 @@ void ofApp::rebuildGuiPanel() {
   if (!realtimeMode) {
     gui.add(pVideoColorLock);
     gui.add(pVideoPeopleCount);
+    gui.add(pVideoPlaybackSpeed);
     if (pVideoPeopleCount.get() == 1) {
       gui.add(pVideoSoloColor);
     }
@@ -872,6 +878,12 @@ void ofApp::onVideoSoloColorChanged(int &) {
 void ofApp::onVideoColorLockChanged(bool &) {
   if (isLoadingGuiSettings) return;
   applyVideoColorMode();
+  saveGuiSettings();
+}
+
+//--------------------------------------------------------------
+void ofApp::onVideoPlaybackSpeedChanged(float &value) {
+  videoProcessor.setPlaybackSpeed(value);
   saveGuiSettings();
 }
 

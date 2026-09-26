@@ -29,6 +29,7 @@ bool VideoProcessing::loadVideo(const std::string &path) {
   humanData = HumanContourData();
 
   videoPlayer.setLoopState(OF_LOOP_NORMAL);
+  videoPlayer.setSpeed(playbackSpeed);
   videoPlayer.play();
   playing = true;
   loaded = true;
@@ -48,6 +49,7 @@ void VideoProcessing::allocateBuffers(int w, int h) {
 void VideoProcessing::play() {
   if (!loaded) return;
   videoPlayer.setVolume(0.0f);
+  videoPlayer.setSpeed(playbackSpeed);
   videoPlayer.setPaused(false);
   playing = true;
   lastProcessedSampleIndex = -1;
@@ -66,9 +68,21 @@ void VideoProcessing::restart() {
   videoPlayer.setVolume(0.0f);
   videoPlayer.setPosition(0.0f);
   videoPlayer.play();
+  videoPlayer.setSpeed(playbackSpeed);
   videoPlayer.setPaused(false);
   playing = true;
   lastProcessedSampleIndex = -1;
+}
+
+//--------------------------------------------------------------
+void VideoProcessing::setPlaybackSpeed(float speed) {
+  playbackSpeed = ofClamp(speed, 0.1f, 2.0f);
+  if (!loaded) return;
+
+  videoPlayer.setSpeed(playbackSpeed);
+  // AVFoundationのsetSpeedは一時停止中のプレイヤーを再開するため、
+  // Controlsで速度だけ変えた場合は一時停止状態を保つ。
+  if (!playing) videoPlayer.setPaused(true);
 }
 
 //--------------------------------------------------------------

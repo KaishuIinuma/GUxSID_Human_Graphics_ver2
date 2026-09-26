@@ -183,6 +183,7 @@ public:
   ofParameter<int> pVideoPeopleCount;
   ofParameter<int> pVideoSoloColor;
   ofParameter<bool> pVideoColorLock;
+  ofParameter<float> pVideoPlaybackSpeed;
   std::vector<size_t> videoPaletteIndices;
 
   ofParameter<bool> pGraphicsEnableBase;   // ベース描画のON/OFF
@@ -258,6 +259,7 @@ public:
   void onVideoPeopleCountChanged(int &value);
   void onVideoSoloColorChanged(int &value);
   void onVideoColorLockChanged(bool &value);
+  void onVideoPlaybackSpeedChanged(float &value);
   void selectVideoPaletteColors();
   void applyVideoColorMode();
   void onScene2OffsetChanged(float &value);
