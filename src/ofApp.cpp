@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <iomanip>
 #include <map>
+#include <numeric>
 #include <sstream>
 
 namespace {
@@ -199,6 +200,10 @@ void ofApp::setupGuiParameters() {
   pLooseContourStrength.set("Loose Contour Strength", 7.0f, 0.0f, 30.0f);
   pAspectRatio.set("Aspect Ratio", 0.0f, -50.0f, 50.0f);
   pColorUpdateIntervalSec.set("Color Update Interval (s)", static_cast<float>(colorUpdateIntervalMs) / 1000.0f, 0.0f, 20.0f);
+  pVideoPeopleCount.set("Video People", 1, 1, 20);
+  pVideoSoloColor.set("Solo Color", 1, 1,
+                      static_cast<int>(colorPaletteSize));
+  pVideoColorLock.set("Video Color Lock", false);
  
 
   pGraphicsEnableBase.set("Graphics Base Enable", true);
@@ -258,6 +263,9 @@ void ofApp::setupGuiParameters() {
       this, &ofApp::onLooseContourStrengthChanged);
   pAspectRatio.addListener(this, &ofApp::onAspectRatioChanged);
   pColorUpdateIntervalSec.addListener(this, &ofApp::onColorUpdateIntervalChanged);
+  pVideoPeopleCount.addListener(this, &ofApp::onVideoPeopleCountChanged);
+  pVideoSoloColor.addListener(this, &ofApp::onVideoSoloColorChanged);
+  pVideoColorLock.addListener(this, &ofApp::onVideoColorLockChanged);
 
   pMainWindowTargetFps.addListener(
       this, &ofApp::onMainWindowTargetFpsChanged);
@@ -305,6 +313,7 @@ void ofApp::setupGuiParameters() {
     humanGraphicsScene->setSceneLayout(pSceneLayoutId.get());
     humanGraphicsScene->setSceneBehavior(pSceneBehaviorId.get());
   }
+  applyVideoColorMode();
   rebuildGuiPanel();
   showGuiWindow();
 }
@@ -324,6 +333,9 @@ void ofApp::setupGuiPersistence() {
   guiParams.add(pLooseContour);
   guiParams.add(pLooseContourStrength);
   guiParams.add(pColorUpdateIntervalSec);
+  guiParams.add(pVideoPeopleCount);
+  guiParams.add(pVideoSoloColor);
+  guiParams.add(pVideoColorLock);
   guiParams.add(pGraphicsEnableBase);
   guiParams.add(pGraphicsEnableOffset);
   guiParams.add(pGraphicsEnableStroke);
@@ -355,6 +367,9 @@ void ofApp::setupGuiPersistence() {
   presetParams.add(pLooseContour);
   presetParams.add(pLooseContourStrength);
   presetParams.add(pColorUpdateIntervalSec);
+  presetParams.add(pVideoPeopleCount);
+  presetParams.add(pVideoSoloColor);
+  presetParams.add(pVideoColorLock);
   presetParams.add(pGraphicsEnableBase);
   presetParams.add(pGraphicsEnableOffset);
   presetParams.add(pGraphicsEnableStroke);
@@ -506,6 +521,8 @@ void ofApp::onRevertPresetPressed() {
     isLoadingGuiSettings = true;
     ofDeserialize(loadedPresetSnapshot, presetParams);
     isLoadingGuiSettings = false;
+    applyVideoColorMode();
+    rebuildGuiPanel();
     presetIsDirty = false;
     pPresetName = loadedPresetFileName;
     pPresetStatus = "Preset reverted";
@@ -602,6 +619,7 @@ void ofApp::onPresetIndexChanged(int &index) {
     isLoadingGuiSettings = true;
     ofDeserialize(preset, presetParams);
     isLoadingGuiSettings = false;
+    applyVideoColorMode();
     loadedPresetFileName = ofFilePath::getFileName(presetPath);
     pPresetName = loadedPresetFileName;
     captureLoadedPresetSnapshot();
@@ -661,6 +679,13 @@ void ofApp::rebuildGuiPanel() {
   gui.add(pLooseContour);
   gui.add(pLooseContourStrength);
   gui.add<float>(pColorUpdateIntervalSec);
+  if (!realtimeMode) {
+    gui.add(pVideoColorLock);
+    gui.add(pVideoPeopleCount);
+    if (pVideoPeopleCount.get() == 1) {
+      gui.add(pVideoSoloColor);
+    }
+  }
 
 
   gui.add(pGraphicsEnableBase);
@@ -780,6 +805,68 @@ void ofApp::onColorUpdateIntervalChanged(float &value) {
 }
 
 //--------------------------------------------------------------
+void ofApp::onVideoPeopleCountChanged(int &) {
+  if (isLoadingGuiSettings) return;
+  selectVideoPaletteColors();
+  applyVideoColorMode();
+  rebuildGuiPanel();
+  saveGuiSettings();
+}
+
+//--------------------------------------------------------------
+void ofApp::onVideoSoloColorChanged(int &) {
+  if (isLoadingGuiSettings) return;
+  applyVideoColorMode();
+  saveGuiSettings();
+}
+
+//--------------------------------------------------------------
+void ofApp::onVideoColorLockChanged(bool &) {
+  if (isLoadingGuiSettings) return;
+  applyVideoColorMode();
+  saveGuiSettings();
+}
+
+//--------------------------------------------------------------
+void ofApp::selectVideoPaletteColors() {
+  videoPaletteIndices.clear();
+  if (!videoProcessor.isLoaded()) return;
+
+  std::vector<size_t> deck(colorPaletteSize);
+  const size_t peopleCount = static_cast<size_t>(pVideoPeopleCount.get());
+  while (videoPaletteIndices.size() < peopleCount) {
+    std::iota(deck.begin(), deck.end(), 0);
+    for (size_t i = deck.size(); i > 1; --i) {
+      std::swap(deck[i - 1], deck[static_cast<size_t>(ofRandom(i))]);
+    }
+    for (size_t color : deck) {
+      if (videoPaletteIndices.size() == peopleCount) break;
+      videoPaletteIndices.push_back(color);
+    }
+  }
+}
+
+//--------------------------------------------------------------
+void ofApp::applyVideoColorMode() {
+  if (!humanGraphicsScene) return;
+  if (realtimeMode || !videoProcessor.isLoaded() || !pVideoColorLock.get()) {
+    humanGraphicsScene->setLockedPaletteIndices({});
+    return;
+  }
+
+  if (pVideoPeopleCount.get() == 1) {
+    humanGraphicsScene->setLockedPaletteIndices(
+        {static_cast<size_t>(pVideoSoloColor.get() - 1)});
+  } else {
+    if (videoPaletteIndices.size() !=
+        static_cast<size_t>(pVideoPeopleCount.get())) {
+      selectVideoPaletteColors();
+    }
+    humanGraphicsScene->setLockedPaletteIndices(videoPaletteIndices);
+  }
+}
+
+//--------------------------------------------------------------
 
 
 void ofApp::onGraphicsEnableBaseChanged(bool &value) {
@@ -890,6 +977,7 @@ void ofApp::onSceneBehaviorIdChanged(string &value) {
 //--------------------------------------------------------------
 void ofApp::onRealtimeChanged(bool &value) {
   realtimeMode = value;
+  applyVideoColorMode();
   // モードを切り替えた直後は、次に届いたフレームをすぐ処理できるようにする。
   lastRealtimeProcessMs = 0;
 
@@ -1342,6 +1430,8 @@ void ofApp::handleDroppedFile(const ofDragInfo &dragInfo) {
 
   bool ok = videoProcessor.loadVideo(path);
   if (ok) {
+    selectVideoPaletteColors();
+    applyVideoColorMode();
     // 動画の解像度・縦横比にメインウィンドウを合わせる
     resizeMainWindowToVideo();
 

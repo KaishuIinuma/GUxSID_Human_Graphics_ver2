@@ -14,7 +14,37 @@ class MaterialAssignmentSystem {
               size_t paletteSize, uint64_t updateIntervalMs,
               MaterialType baseMaterialType,
               MaterialType outlineMaterialType,
+              const std::vector<size_t>& lockedPaletteIndices,
               uint64_t now = ofGetElapsedTimeMillis()) {
+    if (!lockedPaletteIndices.empty() && paletteSize > 0) {
+      std::vector<ObjectId> sourceIds;
+      sourceIds.reserve(objects.size());
+      for (const auto& object : objects) {
+        sourceIds.push_back(object.sourceObjectIds.empty()
+                                ? object.id : object.sourceObjectIds.front());
+      }
+      std::sort(sourceIds.begin(), sourceIds.end());
+      sourceIds.erase(std::unique(sourceIds.begin(), sourceIds.end()),
+                      sourceIds.end());
+
+      for (auto& object : objects) {
+        const ObjectId sourceId = object.sourceObjectIds.empty()
+                                      ? object.id : object.sourceObjectIds.front();
+        const size_t personIndex = static_cast<size_t>(
+            std::lower_bound(sourceIds.begin(), sourceIds.end(), sourceId) -
+            sourceIds.begin());
+        const size_t paletteIndex =
+            lockedPaletteIndices[personIndex % lockedPaletteIndices.size()] %
+            paletteSize;
+        const ofColor color = palette[paletteIndex];
+        object.appearance.baseMaterial =
+            {baseMaterialType, color, color, {0.0f, 1.0f}};
+        object.appearance.outlineMaterial =
+            {outlineMaterialType, color, color, {0.0f, 1.0f}};
+      }
+      return;
+    }
+
     const bool objectCountChanged =
         assignedAppearances.size() != objects.size();
     const bool materialTypeChanged =

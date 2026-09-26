@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <utility>
 
 namespace {
 
@@ -64,6 +65,7 @@ void HumanGraphicsScene::update(const HumanContourData& humanData,
   materialAssignmentSystem.update(
       sceneObjects, ofApp::colorPallate, ofApp::colorPaletteSize,
       ofApp::colorUpdateIntervalMs, baseMaterialType, outlineMaterialType,
+      lockedPaletteIndices,
       static_cast<uint64_t>(std::max(0.0f, elapsedSeconds) * 1000.0f));
 
   if (compositionUpdated && sceneLayout) {
@@ -104,6 +106,13 @@ void HumanGraphicsScene::setCanvasSize(int width, int height) {
   canvasWidth = width;
   canvasHeight = height;
   hasPipelineSignature = false;
+}
+
+void HumanGraphicsScene::setLockedPaletteIndices(
+    std::vector<size_t> paletteIndices) {
+  if (lockedPaletteIndices == paletteIndices) return;
+  lockedPaletteIndices = std::move(paletteIndices);
+  materialAssignmentSystem.reset();
 }
 
 int HumanGraphicsScene::activeCanvasWidth() const {

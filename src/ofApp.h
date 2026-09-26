@@ -179,6 +179,11 @@ public:
   ofParameter<float> pLooseContourStrength; // 輪郭変形幅。人物幅に対する割合(%)
   ofParameter<float> pAspectRatio; // 検出前の元フレームの縦横比変化率(%)
   ofParameter<float> pColorUpdateIntervalSec; // 色の更新頻度(秒) 0〜20
+  // Video専用。1人は指定色、2人以上は動画読込時に選んだ色を固定できる。
+  ofParameter<int> pVideoPeopleCount;
+  ofParameter<int> pVideoSoloColor;
+  ofParameter<bool> pVideoColorLock;
+  std::vector<size_t> videoPaletteIndices;
 
   ofParameter<bool> pGraphicsEnableBase;   // ベース描画のON/OFF
   ofParameter<bool> pGraphicsEnableOffset; // オフセット描画のON/OFF
@@ -246,6 +251,11 @@ public:
   void onLooseContourStrengthChanged(float &value);
   void onAspectRatioChanged(float &value);
   void onColorUpdateIntervalChanged(float &value);
+  void onVideoPeopleCountChanged(int &value);
+  void onVideoSoloColorChanged(int &value);
+  void onVideoColorLockChanged(bool &value);
+  void selectVideoPaletteColors();
+  void applyVideoColorMode();
   void onScene2OffsetChanged(float &value);
   void onScene3StrokeWeightChanged(float &value);
   void onRealtimeChanged(bool &value);

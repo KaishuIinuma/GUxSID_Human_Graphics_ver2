@@ -27,6 +27,7 @@ class HumanGraphicsScene : public BaseScene {
   void draw() override;
   void draw(bool drawBackground);
   void setCanvasSize(int width, int height);
+  void setLockedPaletteIndices(std::vector<size_t> paletteIndices);
   void setRenderRecipe(const std::string& recipeId);
   std::string_view renderRecipeId() const;
   void setMergeEvent(const std::string& eventId);
@@ -54,6 +55,7 @@ class HumanGraphicsScene : public BaseScene {
   gux::GeometryProcessor geometryProcessor;
   gux::SceneComposer sceneComposer;
   gux::MaterialAssignmentSystem materialAssignmentSystem;
+  std::vector<size_t> lockedPaletteIndices;
   // 動画書き出しではHumanGraphicsScene全体をコピーするため、Recipeは共有所有にする。
   // Recipe自体は状態を持たず、通常描画と書き出し描画で安全に共有できる。
   std::shared_ptr<gux::RenderRecipe> renderRecipe;
