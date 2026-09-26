@@ -167,7 +167,7 @@ void ofApp::setupGuiParameters() {
     ofxBaseGui::setUseTTF(false);
   }
   ofxBaseGui::setDefaultWidth(controlWindowWidth - 40);
-  ofxBaseGui::setDefaultHeight(30);
+  ofxBaseGui::setDefaultHeight(26);
   ofxBaseGui::setDefaultTextPadding(8);
 
   pRealtime.set("Realtime", true);
