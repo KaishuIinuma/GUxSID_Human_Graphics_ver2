@@ -861,7 +861,9 @@ void ofApp::onColorUpdateIntervalChanged(float &value) {
 //--------------------------------------------------------------
 void ofApp::onVideoPeopleCountChanged(int &) {
   if (isLoadingGuiSettings) return;
-  selectVideoPaletteColors();
+  if (pVideoColorLock.get() && pVideoPeopleCount.get() > 1) {
+    selectVideoPaletteColors();
+  }
   applyVideoColorMode();
   rebuildGuiPanel();
   saveGuiSettings();
@@ -875,7 +877,10 @@ void ofApp::onVideoSoloColorChanged(int &) {
 }
 
 //--------------------------------------------------------------
-void ofApp::onVideoColorLockChanged(bool &) {
+void ofApp::onVideoColorLockChanged(bool &enabled) {
+  if (enabled && pVideoPeopleCount.get() > 1) {
+    selectVideoPaletteColors();
+  }
   if (isLoadingGuiSettings) return;
   applyVideoColorMode();
   saveGuiSettings();
@@ -889,8 +894,8 @@ void ofApp::onVideoPlaybackSpeedChanged(float &value) {
 
 //--------------------------------------------------------------
 void ofApp::selectVideoPaletteColors() {
+  const std::vector<size_t> previousColors = videoPaletteIndices;
   videoPaletteIndices.clear();
-  if (!videoProcessor.isLoaded()) return;
 
   std::vector<size_t> deck(colorPaletteSize);
   const size_t peopleCount = static_cast<size_t>(pVideoPeopleCount.get());
@@ -903,6 +908,10 @@ void ofApp::selectVideoPaletteColors() {
       if (videoPaletteIndices.size() == peopleCount) break;
       videoPaletteIndices.push_back(color);
     }
+  }
+  // トグルを再びONにしたとき、偶然同じ配色を引いても見た目が変わるようにする。
+  if (videoPaletteIndices == previousColors && videoPaletteIndices.size() > 1) {
+    std::swap(videoPaletteIndices[0], videoPaletteIndices[1]);
   }
 }
 
@@ -1505,7 +1514,6 @@ void ofApp::loadVideoFile(const std::string &path) {
 
   bool ok = videoProcessor.loadVideo(path);
   if (ok) {
-    selectVideoPaletteColors();
     applyVideoColorMode();
     // 動画の解像度・縦横比にメインウィンドウを合わせる
     resizeMainWindowToVideo();
