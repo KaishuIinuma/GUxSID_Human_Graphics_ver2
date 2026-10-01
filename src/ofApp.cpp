@@ -1484,9 +1484,13 @@ void ofApp::onGuiWindowFileDragged(ofDragInfo &dragInfo) {
 
 //--------------------------------------------------------------
 void ofApp::onGuiWindowKeyPressed(ofKeyEventArgs &args) {
+  // DキーはMain Windowと同じデバッグ表示切り替え処理へ渡す。
+  if (args.key == 'd' || args.key == 'D') {
+    keyPressed(args.key);
+  }
   // Main Windowが閉じられていてもControls Windowは残るため、
   // Controls側でAキーを受けてMain Windowを復帰できるようにする。
-  if (args.key == 'a' || args.key == 'A') {
+  else if (args.key == 'a' || args.key == 'A') {
     showMainWindow();
   }
 }
