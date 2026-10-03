@@ -1,3 +1,0 @@
-#!/bin/sh
-$OF_CORE_BUILD_COMMAND
-

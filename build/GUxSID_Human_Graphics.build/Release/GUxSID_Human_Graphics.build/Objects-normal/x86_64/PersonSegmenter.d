@@ -496,4 +496,7 @@ dependencies: \
   ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/dnn/utils/../dnn.hpp \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/core/HumanContourData.h \
   ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/imgproc.hpp \
-  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/./imgproc/segmentation.hpp
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/./imgproc/segmentation.hpp \
+  /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/../third_party/onnxruntime/include/onnxruntime_c_api.h \
+  /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/../third_party/onnxruntime/include/onnxruntime_error_code.h \
+  /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/../third_party/onnxruntime/include/onnxruntime_ep_c_api.h

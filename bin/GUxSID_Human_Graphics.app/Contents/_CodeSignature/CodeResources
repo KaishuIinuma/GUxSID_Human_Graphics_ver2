@@ -12,13 +12,17 @@
 		<data>
 		gPn+ScGWLyfIh2B+CA072K8iv2g=
 		</data>
+		<key>Resources/data/onnxruntime/libonnxruntime.1.30.0.dylib</key>
+		<data>
+		QSK79bz2VefhDcP1PFqF7CRkMSg=
+		</data>
 		<key>Resources/data/presets/default.json</key>
 		<data>
-		Xs55o86tx9vbgVrkqWsOKsTobeU=
+		IP3DDIkGfVf5Z5u2uSGReF4tIlQ=
 		</data>
 		<key>Resources/data/presets/fill.json</key>
 		<data>
-		+GCO6dd+oF+adFZz6fU0u8HxYIM=
+		Q4eFaUFL1ct+XdytaMLV2pQ4oeQ=
 		</data>
 		<key>Resources/data/presets/floating_bridge.json</key>
 		<data>
@@ -30,15 +34,11 @@
 		</data>
 		<key>Resources/data/presets/stroke_Poly.json</key>
 		<data>
-		1orNS5b9MXf16ySAuVlKCIX390Q=
+		/E1YQW6ULqJUDMovuxs26p8pWdI=
 		</data>
 		<key>Resources/data/presets/stroke_Round.json</key>
 		<data>
-		jNilZSDQ+f90pnBLpL4KOsYNhSw=
-		</data>
-		<key>Resources/data/selfie_segmentation.onnx</key>
-		<data>
-		+4s1lBlEnWGNaSkwqEe7U1y6EyI=
+		aKuIcrGGNxQ2Wo47PKtvyDbIU+k=
 		</data>
 		<key>Resources/data/settings.xml</key>
 		<data>
@@ -69,18 +69,25 @@
 			qMsRvWptjsNdUKDS2Fu+4KzwjqsFBBEH4Fj3hNt70eI=
 			</data>
 		</dict>
+		<key>Resources/data/onnxruntime/libonnxruntime.1.30.0.dylib</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			vMkRD51jihGd4tt6+zupodqAhfDLNAHhxIrhyvRQtvo=
+			</data>
+		</dict>
 		<key>Resources/data/presets/default.json</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			q7NgVFCz1MGD4wwbcH7+9NU35Uf15i1P8FD+WAo8Sfc=
+			BIsyxYy7haWtyHyXUaB/T6EIEBkAY6Grexg+h9NKNsw=
 			</data>
 		</dict>
 		<key>Resources/data/presets/fill.json</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			HjhyDVSXcQJq8Ai5uRQ/ajn19i+zznQoy25QSFCbBYQ=
+			ziV9G174EY9u+pd1ch8pAH8Z6PKZT7WRq6r2JagimZU=
 			</data>
 		</dict>
 		<key>Resources/data/presets/floating_bridge.json</key>
@@ -101,21 +108,14 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			h7trggcbHguRztPf2x3oxY6wfMieHVtC1q22eeAogL0=
+			wy3BpRHmVywYzy0LvdHyTJWqEQOksS22QCfyF1CbA/o=
 			</data>
 		</dict>
 		<key>Resources/data/presets/stroke_Round.json</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			UWWTAYIWPpK/Tg8lOUEOuCtzmJVMVMLfbjHiNceJQe4=
-			</data>
-		</dict>
-		<key>Resources/data/selfie_segmentation.onnx</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			MkGsStiqNb2vM5Rndtsp98KDpBOqCw2suUg1lLRTGq0=
+			yJeyJJhGEKJM0tyIBIuDhhoUeig+cSewU+6DVz7xr5g=
 			</data>
 		</dict>
 		<key>Resources/data/settings.xml</key>
