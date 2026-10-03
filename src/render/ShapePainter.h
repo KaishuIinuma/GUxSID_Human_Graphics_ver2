@@ -23,7 +23,7 @@ class ShapePainter {
 
   void drawStroke(const ofPolyline& polygon, const ofColor& color,
                   float strokeWeight, StrokeJoinType joinType) const {
-    if (polygon.size() < 3) return;
+    if (polygon.size() < 3 || !std::isfinite(strokeWeight) || strokeWeight <= 0.0f) return;
     ofSetColor(color);
     ofFill();
     for (size_t i = 0; i < polygon.size(); ++i) {
@@ -47,10 +47,12 @@ class ShapePainter {
         continue;
       }
 
+      if (length <= 1e-6f || glm::length2(p1 - previous) <= 1e-12f) continue;
       const glm::vec2 incoming = glm::normalize(p1 - previous);
       const glm::vec2 outgoing = glm::normalize(p2 - p1);
       const glm::vec2 normal1(-incoming.y, incoming.x);
       const glm::vec2 normal2(-outgoing.y, outgoing.x);
+      if (glm::length2(normal1 + normal2) <= 1e-12f) continue;
       const glm::vec2 miter = glm::normalize(normal1 + normal2);
       const float dot = glm::dot(normal1, miter);
       if (std::abs(dot) <= 0.05f) continue;

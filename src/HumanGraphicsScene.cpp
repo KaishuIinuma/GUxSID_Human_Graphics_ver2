@@ -44,7 +44,7 @@ void HumanGraphicsScene::update(const HumanContourData& humanData,
     hasDetectionSignature = true;
   }
 
-  const uint64_t currentPipelineSignature = pipelineSignature(humanData);
+  const uint64_t currentPipelineSignature = pipelineSignature(currentDetectionSignature);
   bool compositionUpdated = false;
   bool mergeJustStarted = false;
   if (!hasPipelineSignature || currentPipelineSignature != lastPipelineSignature) {
@@ -186,6 +186,7 @@ void HumanGraphicsScene::setSceneBehavior(const std::string& behaviorId) {
     sceneBehavior = std::make_shared<gux::StandardSceneBehavior>();
   }
   sceneBehavior->reset();
+  hasPipelineSignature = false;
 }
 
 std::string_view HumanGraphicsScene::sceneBehaviorId() const {
@@ -207,9 +208,8 @@ uint64_t HumanGraphicsScene::detectionSignature(
   return signature;
 }
 
-uint64_t HumanGraphicsScene::pipelineSignature(
-    const HumanContourData& humanData) const {
-  uint64_t signature = detectionSignature(humanData);
+uint64_t HumanGraphicsScene::pipelineSignature(uint64_t detectionHash) const {
+  uint64_t signature = detectionHash;
   hashCombine(signature, std::hash<int>{}(ofApp::vertexCount));
   hashCombine(signature, std::hash<bool>{}(enableBase));
   hashCombine(signature, std::hash<bool>{}(enableOffset));

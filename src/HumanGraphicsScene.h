@@ -79,7 +79,7 @@ class HumanGraphicsScene : public BaseScene {
   int activeCanvasWidth() const;
   int activeCanvasHeight() const;
   uint64_t detectionSignature(const HumanContourData& humanData) const;
-  uint64_t pipelineSignature(const HumanContourData& humanData) const;
+  uint64_t pipelineSignature(uint64_t detectionHash) const;
   gux::GeometrySettings geometrySettings() const;
   gux::CompositionSettings compositionSettings() const;
   gux::RenderContext renderContext() const;
