@@ -79,9 +79,6 @@ void migrateLegacyPersonConfidenceKey(ofJson& settings) {
   if (controls->find("YOLO_Confidence") == controls->end()) {
     (*controls)["YOLO_Confidence"] = *legacy;
   }
-  if (controls->find("Classic_Mask_Threshold") == controls->end()) {
-    (*controls)["Classic_Mask_Threshold"] = *legacy;
-  }
 }
 
 void configureBundledDataPath() {
@@ -143,8 +140,6 @@ void ofApp::setup() {
     ofLogError() << "YOLOモデルの読み込みに失敗しました。data/に"
                      "yolo11n-seg.onnx を配置しているか確認してください: " << modelPath;
   }
-  personSegmenter.loadClassicModel(
-      ofToDataPath("selfie_segmentation.onnx", true));
 
   // シーンの初期化（まずはscene1をデフォルトに設定）
   
@@ -208,9 +203,7 @@ void ofApp::setupGuiParameters() {
 
   pYoloConfidence.set("YOLO Confidence",
                       personSegmenter.yoloConfidenceThreshold, 0.0f, 1.0f);
-  pClassicMaskThreshold.set("Classic Mask Threshold",
-                            personSegmenter.classicMaskThreshold, 0.0f, 1.0f);
-  pClassic.set("Classic", false);
+  pYoloInput320.set("YOLO Input 320", false);
 
   pVertexCount.set("Vertex Count", vertexCount, 4, 100);
   pLooseContour.set("Loose Contour", false);
@@ -267,17 +260,19 @@ void ofApp::setupGuiParameters() {
   // 保存済みモードを先に確定し、Video起動時にカメラを開かないようにする。
   // ofParameterのリスナーはこの後で登録するため、ここでは明示的に反映する。
   realtimeMode = pRealtime.get();
-  ofSetFrameRate(pMainWindowTargetFps.get());
+  applyTargetFrameRate(pMainWindowTargetFps.get());
   videoProcessor.processFps = static_cast<float>(pMainWindowTargetFps.get());
   personSegmenter.aspectRatioPercent = pAspectRatio.get();
-  personSegmenter.setClassic(pClassic.get());
+  if (pYoloInput320.get()) {
+    bool enabled = true;
+    onYoloInput320Changed(enabled);
+  }
 
   pCameraIndex.addListener(this, &ofApp::onCameraIndexChanged);
   pRealtime.addListener(this, &ofApp::onRealtimeChanged);
   pFlipHorizontal.addListener(this, &ofApp::onFlipHorizontalChanged);
   pYoloConfidence.addListener(this, &ofApp::onYoloConfidenceChanged);
-  pClassicMaskThreshold.addListener(this, &ofApp::onClassicMaskThresholdChanged);
-  pClassic.addListener(this, &ofApp::onClassicChanged);
+  pYoloInput320.addListener(this, &ofApp::onYoloInput320Changed);
   pVertexCount.addListener(this, &ofApp::onVertexCountChanged);
   pLooseContour.addListener(this, &ofApp::onLooseContourChanged);
   pLooseContourStrength.addListener(
@@ -313,7 +308,6 @@ void ofApp::setupGuiParameters() {
   int savedCameraIndex = pCameraIndex.get();
   onCameraIndexChanged(savedCameraIndex);
   personSegmenter.yoloConfidenceThreshold = pYoloConfidence.get();
-  personSegmenter.classicMaskThreshold = pClassicMaskThreshold.get();
   vertexCount = pVertexCount.get();
   colorUpdateIntervalMs = static_cast<uint64_t>(pColorUpdateIntervalSec.get() * 1000.0f);
   videoProcessor.setPlaybackSpeed(pVideoPlaybackSpeed.get());
@@ -352,9 +346,8 @@ void ofApp::setupGuiPersistence() {
   guiParams.add(pRealtime);
   guiParams.add(pCameraIndex);
   guiParams.add(pFlipHorizontal);
-  guiParams.add(pClassic);
   guiParams.add(pYoloConfidence);
-  guiParams.add(pClassicMaskThreshold);
+  guiParams.add(pYoloInput320);
   guiParams.add(pVertexCount);
   guiParams.add(pGraphicsOffsetScale);
   guiParams.add(pAspectRatio);
@@ -389,9 +382,8 @@ void ofApp::setupGuiPersistence() {
   presetParams.setName("ControlsSettings");
   presetParams.add(pCameraIndex);
   presetParams.add(pFlipHorizontal);
-  presetParams.add(pClassic);
   presetParams.add(pYoloConfidence);
-  presetParams.add(pClassicMaskThreshold);
+  presetParams.add(pYoloInput320);
   presetParams.add(pVertexCount);
   presetParams.add(pGraphicsOffsetScale);
   presetParams.add(pAspectRatio);
@@ -457,6 +449,7 @@ void ofApp::saveGuiSettings() const {
 
 //--------------------------------------------------------------
 void ofApp::exit() {
+  finishRealtimeDetection(false);
   saveGuiSettings();
 }
 
@@ -707,11 +700,9 @@ void ofApp::rebuildGuiPanel() {
   }
 
 
-  gui.add(pClassic);
-  if (pClassic.get()) {
-    gui.add<float>(pClassicMaskThreshold);
-  } else {
-    gui.add<float>(pYoloConfidence);
+  gui.add<float>(pYoloConfidence);
+  if (ofFile(ofToDataPath("yolo11n-seg-320.onnx", true)).exists()) {
+    gui.add(pYoloInput320);
   }
   gui.add(pVertexCount);
   gui.add(pGraphicsOffsetScale);
@@ -760,7 +751,7 @@ void ofApp::updateControlsMetrics() {
     pMainWindowResolution =
         ofToString(static_cast<int>(std::lround(size.x))) + " x " +
         ofToString(static_cast<int>(std::lround(size.y)));
-    pMainWindowFps = ofToString(ofGetFrameRate(), 1) + " / " +
+    pMainWindowFps = ofToString(mainWindow->events().getFrameRate(), 1) + " / " +
                      ofToString(pMainWindowTargetFps.get()) + " fps";
   } else {
     pMainWindowResolution = "Unavailable";
@@ -779,10 +770,27 @@ void ofApp::updateControlsMetrics() {
 
 //--------------------------------------------------------------
 void ofApp::onMainWindowTargetFpsChanged(int &value) {
-  ofSetFrameRate(value);
+  applyTargetFrameRate(value);
   videoProcessor.processFps = static_cast<float>(value);
   lastRealtimeProcessMs = 0;
   saveGuiSettings();
+}
+
+void ofApp::applyTargetFrameRate(int value) {
+  // ofSetFrameRate は現在のウィンドウだけを変更する。GUI操作中の
+  // currentWindow は Controls なので、両ウィンドウを明示して設定する。
+  if (mainWindow) mainWindow->events().setFrameRate(value);
+  if (guiWindow) guiWindow->events().setFrameRate(value);
+}
+
+void ofApp::finishRealtimeDetection(bool applyResult) {
+  if (!detectionFuture.valid()) return;
+  try {
+    HumanContourData result = detectionFuture.get();
+    if (applyResult) humanData = std::move(result);
+  } catch (const std::exception &e) {
+    ofLogError("ofApp") << "Realtime detection failed: " << e.what();
+  }
 }
 
 //--------------------------------------------------------------
@@ -792,37 +800,33 @@ void ofApp::onExportAlphaChanged(bool &value) {
 
 //--------------------------------------------------------------
 void ofApp::onYoloConfidenceChanged(float &value) {
+  finishRealtimeDetection(false);
   personSegmenter.yoloConfidenceThreshold = value;
-  if (!personSegmenter.isClassic()) {
-    videoProcessor.requestReprocess();
-    lastRealtimeProcessMs = 0;
-  }
-  saveGuiSettings();
-}
-
-//--------------------------------------------------------------
-void ofApp::onClassicMaskThresholdChanged(float &value) {
-  personSegmenter.classicMaskThreshold = value;
-  if (personSegmenter.isClassic()) {
-    videoProcessor.requestReprocess();
-    lastRealtimeProcessMs = 0;
-  }
-  saveGuiSettings();
-}
-
-//--------------------------------------------------------------
-void ofApp::onClassicChanged(bool &value) {
-  personSegmenter.setClassic(value);
-  humanData = HumanContourData();
-  videoProcessor.humanData = HumanContourData();
   videoProcessor.requestReprocess();
   lastRealtimeProcessMs = 0;
-  if (!personSegmenter.isLoaded()) {
-    ofLogError("ofApp") << (value ? "Classic" : "YOLO")
-                        << " model is unavailable";
-  }
   saveGuiSettings();
-  if (!isLoadingGuiSettings) rebuildGuiPanel();
+}
+
+//--------------------------------------------------------------
+void ofApp::onYoloInput320Changed(bool &value) {
+  finishRealtimeDetection(false);
+  const std::string selectedPath = ofToDataPath(
+      value ? "yolo11n-seg-320.onnx" : "yolo11n-seg.onnx", true);
+  if (value && !ofFile(selectedPath).exists()) {
+    ofLogError("ofApp") << "320px ONNX model is missing: " << selectedPath;
+    pYoloInput320.setWithoutEventNotifications(false);
+    saveGuiSettings();
+    return;
+  }
+  if (!personSegmenter.loadModel(selectedPath, value ? 320 : 640)) {
+    ofLogError("ofApp") << "YOLO model failed; restoring 640px model";
+    personSegmenter.loadModel(ofToDataPath("yolo11n-seg.onnx", true), 640);
+    pYoloInput320.setWithoutEventNotifications(false);
+  }
+  humanData = HumanContourData();
+  videoProcessor.requestReprocess();
+  lastRealtimeProcessMs = 0;
+  saveGuiSettings();
 }
 
 //--------------------------------------------------------------
@@ -845,6 +849,7 @@ void ofApp::onLooseContourStrengthChanged(float &value) {
 
 //--------------------------------------------------------------
 void ofApp::onAspectRatioChanged(float &value) {
+  finishRealtimeDetection(false);
   personSegmenter.aspectRatioPercent = value;
   // Videoが一時停止中でも、次のupdateで保持中の元フレームから検出し直す。
   videoProcessor.requestReprocess();
@@ -1049,6 +1054,7 @@ void ofApp::onSceneBehaviorIdChanged(string &value) {
 //--------------------------------------------------------------
 //--------------------------------------------------------------
 void ofApp::onRealtimeChanged(bool &value) {
+  finishRealtimeDetection(false);
   realtimeMode = value;
   applyVideoColorMode();
   // モードを切り替えた直後は、次に届いたフレームをすぐ処理できるようにする。
@@ -1557,6 +1563,7 @@ void ofApp::showGuiWindow() {
   auto newGuiWindow = ofCreateWindow(guiSettings);
   guiWindow = std::dynamic_pointer_cast<ofAppGLFWWindow>(newGuiWindow);
   if (!guiWindow) return;
+  guiWindow->events().setFrameRate(pMainWindowTargetFps.get());
 
   ofAddListener(guiWindow->events().draw, this, &ofApp::drawGui);
   ofAddListener(guiWindow->events().fileDragEvent, this,
@@ -1599,6 +1606,7 @@ void ofApp::showMainWindow() {
   auto newMainWindow = ofCreateWindow(mainSettings);
   mainWindow = std::dynamic_pointer_cast<ofAppGLFWWindow>(newMainWindow);
   if (!mainWindow) return;
+  mainWindow->events().setFrameRate(pMainWindowTargetFps.get());
 
   GLFWwindow *handle = mainWindow->getGLFWWindow();
   if (handle) {
@@ -1691,13 +1699,16 @@ void ofApp::update() {
 
   if (realtimeMode) {
     // ============================================
-    // Realtime=true: 従来通りWebカメラ映像を処理する
+    // Realtime=true: Webカメラ映像を処理する
+    // YOLO推論を別スレッドで実行し、完了した結果をメインスレッドで反映する。
     // ============================================
     cam.update();
 
-    const float fps = static_cast<float>(pMainWindowTargetFps.get());
-    const uint64_t intervalMs = static_cast<uint64_t>(1000.0f / fps);
-    const uint64_t now = ofGetElapsedTimeMillis();
+    if (detectionFuture.valid() &&
+        detectionFuture.wait_for(std::chrono::milliseconds(0)) ==
+            std::future_status::ready) {
+      finishRealtimeDetection(true);
+    }
 
     if (cam.isFrameNew()) {
       const ofPixels &cameraPixels = cam.getPixels();
@@ -1715,16 +1726,26 @@ void ofApp::update() {
         colorImg.mirror(false, true);
       }
 
-      // AIモデルが利用可能な場合だけ、設定した間隔で人物検出を行う。
-      if (personSegmenter.isLoaded() &&
-          (now - lastRealtimeProcessMs) >= intervalMs) {
-        // カメラは要求解像度とは異なるサイズを返すことがあるため、
-        // 実際に届いたフレームサイズでMatを作成する。
-        cv::Mat rgbMat(frameHeight, frameWidth, CV_8UC3,
-                       colorImg.getPixels().getData());
+      // cv::dnn::Net に同時にアクセスしないよう、前の推論が終わるまで
+      // 新しいフレームの推論を起動しない。
+      const uint64_t now = ofGetElapsedTimeMillis();
+      const uint64_t intervalMs = 1000 / std::max(1, pMainWindowTargetFps.get());
+      if (personSegmenter.isLoaded() && !detectionFuture.valid() &&
+          (lastRealtimeProcessMs == 0 || now - lastRealtimeProcessMs >= intervalMs)) {
 
-        humanData =
-            personSegmenter.detect(rgbMat, ofGetWidth(), ofGetHeight());
+        // カメラの画素バッファは次の更新で変わるため、推論用に複製する。
+        cv::Mat frame = cv::Mat(
+            frameHeight, frameWidth, CV_8UC3,
+            colorImg.getPixels().getData()).clone();
+
+        const int outW = ofGetWidth();
+        const int outH = ofGetHeight();
+
+        detectionFuture = std::async(
+            std::launch::async,
+            [this, frame = std::move(frame), outW, outH]() -> HumanContourData {
+              return personSegmenter.detect(frame, outW, outH);
+            });
         lastRealtimeProcessMs = now;
       }
     }
@@ -1743,6 +1764,7 @@ void ofApp::update() {
     currentScene->update(activeData);
   }
 }
+
 
 //--------------------------------------------------------------
 void ofApp::draw() {
@@ -1810,10 +1832,8 @@ void ofApp::drawDebug() {
 
   // ステータスと操作ガイド
   string info = "=== [DEBUG MODE] Person Detection ===\n";
-  info += "Model: " + string(pClassic.get() ? "Classic Selfie" : "YOLO11-seg") + "\n";
-  const float activeThreshold = pClassic.get()
-      ? personSegmenter.classicMaskThreshold
-      : personSegmenter.yoloConfidenceThreshold;
+  info += "Model: YOLO11-seg CoreML GPU\n";
+  const float activeThreshold = personSegmenter.yoloConfidenceThreshold;
   info += "Mode: " + string(realtimeMode ? "Realtime (Camera)" : "Video File") + "\n";
   if (realtimeMode) {
     info += "Camera initialized: " + string(cam.isInitialized() ? "Yes" : "No") + "\n";
@@ -1855,19 +1875,11 @@ void ofApp::keyPressed(int key) {
   // （GUIのスライダーと同じofParameterを操作するので、
   //   キーで動かすとバー側の表示にも即座に反映される）
   // ============================================
-  // 現在の検出モードの閾値 (UP/DOWN, 0.0〜1.0)
+  // YOLO検出の閾値 (UP/DOWN, 0.0〜1.0)
   else if (key == OF_KEY_UP) {
-    if (pClassic.get()) {
-      pClassicMaskThreshold = std::min(1.0f, pClassicMaskThreshold.get() + 0.05f);
-    } else {
-      pYoloConfidence = std::min(1.0f, pYoloConfidence.get() + 0.05f);
-    }
+    pYoloConfidence = std::min(1.0f, pYoloConfidence.get() + 0.05f);
   } else if (key == OF_KEY_DOWN) {
-    if (pClassic.get()) {
-      pClassicMaskThreshold = std::max(0.0f, pClassicMaskThreshold.get() - 0.05f);
-    } else {
-      pYoloConfidence = std::max(0.0f, pYoloConfidence.get() - 0.05f);
-    }
+    pYoloConfidence = std::max(0.0f, pYoloConfidence.get() - 0.05f);
   }
   // 頂点数 ('[' / ']', 4〜100)
   else if (key == '[') {

@@ -172,8 +172,7 @@ public:
 
   // 全体設定
   ofParameter<float> pYoloConfidence;
-  ofParameter<float> pClassicMaskThreshold;
-  ofParameter<bool> pClassic; // true: 旧Selfie Segmentationモデル
+  ofParameter<bool> pYoloInput320;
   ofParameter<int> pVertexCount;        // 頂点数 4〜100
   ofParameter<bool> pLooseContour;       // 安定した緩い輪郭
   ofParameter<float> pLooseContourStrength; // 輪郭変形幅。人物幅に対する割合(%)
@@ -249,8 +248,7 @@ public:
   void setupGuiParameters();
   void updateControlsMetrics();
   void onYoloConfidenceChanged(float &value);
-  void onClassicMaskThresholdChanged(float &value);
-  void onClassicChanged(bool &value);
+  void onYoloInput320Changed(bool &value);
   void onVertexCountChanged(int &value);
   void onLooseContourChanged(bool &value);
   void onLooseContourStrengthChanged(float &value);
@@ -266,6 +264,8 @@ public:
   void onScene3StrokeWeightChanged(float &value);
   void onRealtimeChanged(bool &value);
   void onMainWindowTargetFpsChanged(int &value);
+  void applyTargetFrameRate(int value);
+  void finishRealtimeDetection(bool applyResult);
   void onExportAlphaChanged(bool &value);
   void onPlayPressed();
   void onPausePressed();
@@ -376,6 +376,11 @@ public:
   //   (ポインタで渡す。モデルの二重読み込みはしない)。
   // ============================================
   PersonSegmenter personSegmenter;
+
+  // ============================================
+  // Realtime推論は一度に一件。GUI設定やVideoへの切替時には完了を待つ。
+  // ============================================
+  std::future<HumanContourData> detectionFuture;
 
   // サイズ定義（Webカメラ入力の解像度。動画モードの解像度とは別物）
   const int W = 1920;

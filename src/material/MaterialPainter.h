@@ -65,24 +65,16 @@ class MaterialPainter {
     return material.primary.getLerped(material.secondary, amount);
   }
 
-  static ofPath makePath(const ofPolyline& polygon) {
-    ofPath path;
-    path.setFilled(true);
-    path.moveTo(polygon[0]);
-    for (size_t i = 1; i < polygon.size(); ++i) path.lineTo(polygon[i]);
-    path.close();
-    return path;
-  }
-
   static void drawLinearGradientFill(const ofPolyline& polygon,
                                      const MaterialComponent& material) {
     if (polygon.size() < 3) return;
     const GradientAxis axis = gradientAxis(polygon, material);
-    ofMesh mesh = makePath(polygon).getTessellation();
+    ofMesh mesh = ShapePainter::fillMesh(polygon);
     mesh.clearColors();
     for (const auto& vertex : mesh.getVertices()) {
       mesh.addColor(colorAt(glm::vec2(vertex.x, vertex.y), axis, material));
     }
+    ofSetColor(255);
     mesh.draw();
   }
 
@@ -92,6 +84,18 @@ class MaterialPainter {
                                        StrokeJoinType joinType) {
     if (polygon.size() < 3) return;
     const GradientAxis axis = gradientAxis(polygon, material);
+    const float halfWeight = strokeWeight * 0.5f;
+    ofMesh segments;
+    ofMesh joints;
+    segments.setMode(OF_PRIMITIVE_TRIANGLES);
+    joints.setMode(OF_PRIMITIVE_TRIANGLES);
+    auto triangle = [](ofMesh& mesh, const glm::vec2& a,
+                       const glm::vec2& b, const glm::vec2& c,
+                       const ofColor& ca, const ofColor& cb, const ofColor& cc) {
+      mesh.addVertex(glm::vec3(a, 0.0f)); mesh.addColor(ca);
+      mesh.addVertex(glm::vec3(b, 0.0f)); mesh.addColor(cb);
+      mesh.addVertex(glm::vec3(c, 0.0f)); mesh.addColor(cc);
+    };
     for (size_t i = 0; i < polygon.size(); ++i) {
       const glm::vec2 p1 = polygon[i];
       const glm::vec2 p2 = polygon[(i + 1) % polygon.size()];
@@ -101,25 +105,23 @@ class MaterialPainter {
       const ofColor firstColor = colorAt(p1, axis, material);
       const ofColor secondColor = colorAt(p2, axis, material);
       if (length > 0.0f) {
-        const glm::vec2 normal = glm::vec2(-direction.y, direction.x) / length *
-            (strokeWeight * 0.5f);
-        ofMesh segment;
-        segment.setMode(OF_PRIMITIVE_TRIANGLE_STRIP);
-        segment.addVertex(glm::vec3(p1 + normal, 0));
-        segment.addColor(firstColor);
-        segment.addVertex(glm::vec3(p1 - normal, 0));
-        segment.addColor(firstColor);
-        segment.addVertex(glm::vec3(p2 + normal, 0));
-        segment.addColor(secondColor);
-        segment.addVertex(glm::vec3(p2 - normal, 0));
-        segment.addColor(secondColor);
-        segment.draw();
+        const glm::vec2 normal = glm::vec2(-direction.y, direction.x) / length * halfWeight;
+        triangle(segments, p1 + normal, p1 - normal, p2 + normal,
+                 firstColor, firstColor, secondColor);
+        triangle(segments, p2 + normal, p1 - normal, p2 - normal,
+                 secondColor, firstColor, secondColor);
       }
 
-      ofSetColor(firstColor);
-      ofFill();
       if (joinType == StrokeJoinType::Round) {
-        ofDrawCircle(p1, strokeWeight * 0.5f);
+        constexpr int circleSegments = 16;
+        for (int j = 0; j < circleSegments; ++j) {
+          const float a0 = TWO_PI * j / circleSegments;
+          const float a1 = TWO_PI * (j + 1) / circleSegments;
+          triangle(joints, p1,
+                   p1 + halfWeight * glm::vec2(std::cos(a0), std::sin(a0)),
+                   p1 + halfWeight * glm::vec2(std::cos(a1), std::sin(a1)),
+                   firstColor, firstColor, firstColor);
+        }
         continue;
       }
       if (length <= 1e-6f || glm::length2(p1 - previous) <= 1e-12f) continue;
@@ -133,29 +135,20 @@ class MaterialPainter {
       if (std::abs(dot) <= 0.05f) continue;
       float miterLength = (strokeWeight * 0.5f) / dot;
       if (miterLength > strokeWeight * 4.0f) miterLength = strokeWeight * 4.0f;
-      drawMiterJoint(p1, normal1, normal2, miter, miterLength, strokeWeight);
+      const glm::vec2 outside = p1 + miter * miterLength;
+      const glm::vec2 inside = p1 - miter * miterLength;
+      triangle(joints, p1, p1 + normal1 * halfWeight, outside,
+               firstColor, firstColor, firstColor);
+      triangle(joints, p1, outside, p1 + normal2 * halfWeight,
+               firstColor, firstColor, firstColor);
+      triangle(joints, p1, p1 - normal1 * halfWeight, inside,
+               firstColor, firstColor, firstColor);
+      triangle(joints, p1, inside, p1 - normal2 * halfWeight,
+               firstColor, firstColor, firstColor);
     }
-  }
-
-  static void drawMiterJoint(const glm::vec2& point, const glm::vec2& normal1,
-                             const glm::vec2& normal2, const glm::vec2& miter,
-                             float miterLength, float strokeWeight) {
-    const glm::vec2 outside = point + miter * miterLength;
-    const glm::vec2 inside = point - miter * miterLength;
-    ofMesh outsideJoint;
-    outsideJoint.setMode(OF_PRIMITIVE_TRIANGLE_FAN);
-    outsideJoint.addVertex(glm::vec3(point, 0));
-    outsideJoint.addVertex(glm::vec3(point + normal1 * (strokeWeight * 0.5f), 0));
-    outsideJoint.addVertex(glm::vec3(outside, 0));
-    outsideJoint.addVertex(glm::vec3(point + normal2 * (strokeWeight * 0.5f), 0));
-    outsideJoint.draw();
-    ofMesh insideJoint;
-    insideJoint.setMode(OF_PRIMITIVE_TRIANGLE_FAN);
-    insideJoint.addVertex(glm::vec3(point, 0));
-    insideJoint.addVertex(glm::vec3(point - normal1 * (strokeWeight * 0.5f), 0));
-    insideJoint.addVertex(glm::vec3(inside, 0));
-    insideJoint.addVertex(glm::vec3(point - normal2 * (strokeWeight * 0.5f), 0));
-    insideJoint.draw();
+    ofSetColor(255);
+    if (!segments.getVertices().empty()) segments.draw();
+    if (!joints.getVertices().empty()) joints.draw();
   }
 
   ShapePainter shapePainter;

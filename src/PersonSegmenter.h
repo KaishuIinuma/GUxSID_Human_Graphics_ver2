@@ -3,6 +3,9 @@
 #include "ofMain.h"
 #include <opencv2/dnn.hpp>
 #include "core/HumanContourData.h"
+#include <memory>
+
+class OrtYoloSession;
 
 // ============================================
 // YOLO11-seg (Ultralytics) のONNXモデルを使って、
@@ -40,13 +43,12 @@
 // ============================================
 class PersonSegmenter {
 public:
+  PersonSegmenter();
   // modelPath: ONNXファイルのパス
   // inputSizeArg: モデルの入力解像度（Ultralyticsのデフォルトは640）
-  bool loadModel(const std::string &modelPath, int inputSizeArg =64);
-  bool loadClassicModel(const std::string &modelPath);
-  void setClassic(bool enabled) { classic = enabled; }
-  bool isClassic() const { return classic; }
-  bool isLoaded() const { return classic ? classicLoaded : loaded; }
+  bool loadModel(const std::string &modelPath, int inputSizeArg = 640);
+  ~PersonSegmenter();
+  bool isLoaded() const { return loaded; }
 
   // rgbFrame: 8UC3のRGB画像（元解像度のまま渡してよい。内部でレターボックスする）
   // outputWidth / outputHeight: 結果の輪郭座標をこの座標系にスケールして返す
@@ -61,7 +63,6 @@ public:
   // チューニング用パラメータ（ofApp側のGUIから変更する想定）
   // ============================================
   float yoloConfidenceThreshold = 0.25f; // YOLOの人物クラス信頼度
-  float classicMaskThreshold = 0.6f;      // Classicの人物画素確率
   float aspectRatioPercent = 0.0f; // 検出前の元フレームの縦横比変化率 (%)
   float nmsThreshold = 0.45f;   // NMS(重複検出除去)のIoUしきい値
   int personClassId = 0;        // "person"クラスのID（COCO学習済みなら0）
@@ -69,14 +70,9 @@ public:
   double minContourArea = 500.0; // これより小さい輪郭はノイズとして除外(出力解像度基準)
 
 private:
-  cv::dnn::Net net;
-  cv::dnn::Net classicNet;
+  std::unique_ptr<OrtYoloSession> ortSession;
   bool loaded = false;
-  bool classicLoaded = false;
-  bool classic = false;
   int inputSize = 640;
-  HumanContourData detectClassic(const cv::Mat &rgbFrame,
-                                 int outputWidth, int outputHeight);
 
   struct Detection {
     cv::Rect2f box;                // 640入力空間でのバウンディングボックス(x,y,w,h)

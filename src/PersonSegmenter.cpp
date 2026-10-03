@@ -1,48 +1,185 @@
 #include "PersonSegmenter.h"
 #include <opencv2/imgproc.hpp>
 #include <algorithm>
+#include <climits>
 #include <cmath>
+#include <cstdlib>
+#include <dlfcn.h>
+#include <filesystem>
+#include <stdexcept>
+#include "../third_party/onnxruntime/include/onnxruntime_c_api.h"
+
+// The official macOS arm64 runtime is loaded from data so both the OF make
+// build and the Xcode app bundle use the same, self-contained CoreML backend.
+class OrtYoloSession {
+public:
+  OrtYoloSession(const std::string &modelPath, int inputSize) {
+    try {
+      const std::string libraryPath = ofToDataPath(
+          "onnxruntime/libonnxruntime.1.30.0.dylib", true);
+      library = dlopen(libraryPath.c_str(), RTLD_NOW | RTLD_LOCAL);
+      if (!library) throw std::runtime_error(dlerror());
+      auto getApiBase = reinterpret_cast<const OrtApiBase *(*)()>(
+          dlsym(library, "OrtGetApiBase"));
+      if (!getApiBase) throw std::runtime_error("OrtGetApiBase is missing");
+      api = getApiBase()->GetApi(ORT_API_VERSION);
+      if (!api) throw std::runtime_error("ONNX Runtime API version mismatch");
+
+      check(api->CreateEnv(ORT_LOGGING_LEVEL_WARNING, "GUxSID", &env));
+      OrtSessionOptions *options = nullptr;
+      check(api->CreateSessionOptions(&options));
+      try {
+        check(api->AddSessionConfigEntry(options,
+              "session.disable_cpu_ep_fallback", "1"));
+        const std::filesystem::path cachePath =
+            std::filesystem::path(ofFilePath::getUserHomeDir()) /
+            "Library/Caches/GUxSID_Human_Graphics_ver2/CoreML";
+        std::filesystem::create_directories(cachePath);
+        const std::string cache = cachePath.string();
+        std::vector<const char *> keys = {"ModelFormat", "MLComputeUnits",
+                                          "RequireStaticInputShapes", "ModelCacheDirectory"};
+        std::vector<const char *> values = {"MLProgram", "CPUAndGPU", "1",
+                                            cache.c_str()};
+        // Opt in when validating operation placement on a particular Mac.
+        if (const char *profile = std::getenv("GUXSID_COREML_PROFILE");
+            profile && std::string(profile) == "1") {
+          keys.push_back("ProfileComputePlan");
+          values.push_back("1");
+        }
+        check(api->SessionOptionsAppendExecutionProvider(options,
+              "CoreML", keys.data(), values.data(), keys.size()));
+        check(api->CreateSession(env, modelPath.c_str(), options, &session));
+      } catch (...) {
+        api->ReleaseSessionOptions(options);
+        throw;
+      }
+      api->ReleaseSessionOptions(options);
+
+      OrtAllocator *allocator = nullptr;
+      check(api->GetAllocatorWithDefaultOptions(&allocator));
+      size_t inputCount = 0, outputCount = 0;
+      check(api->SessionGetInputCount(session, &inputCount));
+      check(api->SessionGetOutputCount(session, &outputCount));
+      if (inputCount != 1 || outputCount != 2)
+        throw std::runtime_error("Expected one YOLO input and two outputs");
+      char *name = nullptr;
+      check(api->SessionGetInputName(session, 0, allocator, &name));
+      inputName = name;
+      api->AllocatorFree(allocator, name);
+      for (size_t i = 0; i < outputCount; ++i) {
+        name = nullptr;
+        check(api->SessionGetOutputName(session, i, allocator, &name));
+        outputNames.emplace_back(name);
+        api->AllocatorFree(allocator, name);
+      }
+      check(api->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault,
+                                     &memoryInfo));
+      expectedInputSize = inputSize;
+    } catch (...) {
+      release();
+      throw;
+    }
+  }
+
+  ~OrtYoloSession() { release(); }
+
+  std::vector<cv::Mat> run(cv::Mat &blob) {
+    if (blob.type() != CV_32F || !blob.isContinuous() || blob.dims != 4 ||
+        blob.size[0] != 1 || blob.size[1] != 3 ||
+        blob.size[2] != expectedInputSize || blob.size[3] != expectedInputSize)
+      throw std::runtime_error("Unexpected YOLO input tensor");
+    const int64_t shape[] = {1, 3, expectedInputSize, expectedInputSize};
+    OrtValue *input = nullptr;
+    check(api->CreateTensorWithDataAsOrtValue(memoryInfo, blob.data,
+          blob.total() * blob.elemSize(), shape, 4,
+          ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &input));
+    OrtValue *outputs[2] = {nullptr, nullptr};
+    try {
+      const char *inputNames[] = {inputName.c_str()};
+      const OrtValue *inputs[] = {input};
+      const char *names[] = {outputNames[0].c_str(), outputNames[1].c_str()};
+      check(api->Run(session, nullptr, inputNames, inputs, 1, names, 2,
+                     outputs));
+      std::vector<cv::Mat> result;
+      for (auto *output : outputs) {
+        OrtTensorTypeAndShapeInfo *info = nullptr;
+        check(api->GetTensorTypeAndShape(output, &info));
+        try {
+          ONNXTensorElementDataType type;
+          size_t count = 0;
+          check(api->GetTensorElementType(info, &type));
+          check(api->GetDimensionsCount(info, &count));
+          if (type != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT || count < 3 || count > 4)
+            throw std::runtime_error("Unexpected YOLO output tensor type");
+          std::vector<int64_t> dimensions(count);
+          check(api->GetDimensions(info, dimensions.data(), count));
+          std::vector<int> cvDimensions;
+          for (auto dimension : dimensions) {
+            if (dimension <= 0 || dimension > INT_MAX)
+              throw std::runtime_error("Invalid YOLO output dimension");
+            cvDimensions.push_back(static_cast<int>(dimension));
+          }
+          void *data = nullptr;
+          check(api->GetTensorMutableData(output, &data));
+          result.push_back(cv::Mat(static_cast<int>(count), cvDimensions.data(),
+                                   CV_32F, data).clone());
+        } catch (...) {
+          api->ReleaseTensorTypeAndShapeInfo(info);
+          throw;
+        }
+        api->ReleaseTensorTypeAndShapeInfo(info);
+      }
+      for (auto *output : outputs) api->ReleaseValue(output);
+      api->ReleaseValue(input);
+      return result;
+    } catch (...) {
+      for (auto *output : outputs) if (output) api->ReleaseValue(output);
+      api->ReleaseValue(input);
+      throw;
+    }
+  }
+
+private:
+  void check(OrtStatus *status) const {
+    if (!status) return;
+    const std::string message = api->GetErrorMessage(status);
+    api->ReleaseStatus(status);
+    throw std::runtime_error(message);
+  }
+  void release() {
+    if (api) {
+      if (memoryInfo) api->ReleaseMemoryInfo(memoryInfo);
+      if (session) api->ReleaseSession(session);
+      if (env) api->ReleaseEnv(env);
+    }
+    if (library) dlclose(library);
+  }
+  void *library = nullptr;
+  const OrtApi *api = nullptr;
+  OrtEnv *env = nullptr;
+  OrtSession *session = nullptr;
+  OrtMemoryInfo *memoryInfo = nullptr;
+  std::string inputName;
+  std::vector<std::string> outputNames;
+  int expectedInputSize = 0;
+};
+
+PersonSegmenter::PersonSegmenter() = default;
+PersonSegmenter::~PersonSegmenter() = default;
 
 //--------------------------------------------------------------
 bool PersonSegmenter::loadModel(const std::string &modelPath, int inputSizeArg) {
   inputSize = inputSizeArg;
-
   try {
-    net = cv::dnn::readNetFromONNX(modelPath);
-    net.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
-    net.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
-    loaded = !net.empty();
-
-    if (loaded) {
-      ofLogNotice("PersonSegmenter") << "YOLOモデルの読み込みに成功しました: " << modelPath;
-    } else {
-      ofLogError("PersonSegmenter") << "YOLOモデルの読み込みに失敗しました: " << modelPath;
-    }
-  } catch (const cv::Exception &e) {
-    ofLogError("PersonSegmenter") << "OpenCV DNN Exception: " << e.what();
+    ortSession = std::make_unique<OrtYoloSession>(modelPath, inputSize);
+    loaded = true;
+    ofLogNotice("PersonSegmenter") << "YOLO CoreML MLProgram (GPU) loaded: " << modelPath;
+  } catch (const std::exception &e) {
+    ofLogError("PersonSegmenter") << "YOLO CoreML load failed: " << e.what();
+    ortSession.reset();
     loaded = false;
   }
-
   return loaded;
-}
-
-//--------------------------------------------------------------
-bool PersonSegmenter::loadClassicModel(const std::string &modelPath) {
-  try {
-    classicNet = cv::dnn::readNetFromONNX(modelPath);
-    classicNet.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
-    classicNet.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
-    classicLoaded = !classicNet.empty();
-  } catch (const cv::Exception &e) {
-    ofLogError("PersonSegmenter") << "Classic model error: " << e.what();
-    classicLoaded = false;
-  }
-  if (classicLoaded) {
-    ofLogNotice("PersonSegmenter") << "Classic model loaded: " << modelPath;
-  } else {
-    ofLogError("PersonSegmenter") << "Classic model failed to load: " << modelPath;
-  }
-  return classicLoaded;
 }
 
 //--------------------------------------------------------------
@@ -99,20 +236,19 @@ HumanContourData PersonSegmenter::detect(const cv::Mat &rgbFrame, int outputWidt
                    cv::Scalar(114, 114, 114));
     detectionFrame = &stretchedFrame;
   }
-  if (classic) {
-    return detectClassic(*detectionFrame, outputWidth, outputHeight);
-  }
   cv::Mat letterboxed = letterbox(*detectionFrame, scale, padX, padY);
 
   // 0〜1正規化してNCHW形式のblobを作成（入力は既にRGB前提なのでswapRB=false）
   cv::Mat blob = cv::dnn::blobFromImage(
       letterboxed, 1.0 / 255.0, cv::Size(inputSize, inputSize),
       cv::Scalar(0, 0, 0), false, false);
-  net.setInput(blob);
-
-  std::vector<std::string> outNames = net.getUnconnectedOutLayersNames();
   std::vector<cv::Mat> outs;
-  net.forward(outs, outNames);
+  try {
+    outs = ortSession->run(blob);
+  } catch (const std::exception &e) {
+    ofLogError("PersonSegmenter") << "YOLO CoreML inference failed: " << e.what();
+    return result;
+  }
 
   if (outs.size() < 2) {
     ofLogError("PersonSegmenter") << "想定外の出力数です(" << outs.size()
@@ -163,23 +299,26 @@ HumanContourData PersonSegmenter::detect(const cv::Mat &rgbFrame, int outputWidt
     const float w  = data[2 * N + n];
     const float h  = data[3 * N + n];
 
-    int bestClass = -1;
-    float bestScore = 0.0f;
-    for (int c = 0; c < nc; c++) {
-      const float s = data[(4 + c) * N + n];
-      if (s > bestScore) {
-        bestScore = s;
-        bestClass = c;
+    // 人物クラスが閾値未満なら他の79クラスを読む必要がない。
+    if (personClassId < 0 || personClassId >= nc) continue;
+    const float personScore = data[(4 + personClassId) * N + n];
+    if (personScore <= 0.0f || personScore < yoloConfidenceThreshold) continue;
+    bool otherClassWins = false;
+    for (int c = 0; c < nc; ++c) {
+      if (c != personClassId &&
+          (data[(4 + c) * N + n] > personScore ||
+           (c < personClassId && data[(4 + c) * N + n] == personScore))) {
+        otherClassWins = true;
+        break;
       }
     }
-
-    if (bestClass != personClassId || bestScore < yoloConfidenceThreshold) {
+    if (otherClassWins) {
       continue;
     }
 
     Detection det;
     det.box = cv::Rect2f(cx - w / 2.0f, cy - h / 2.0f, w, h);
-    det.confidence = bestScore;
+    det.confidence = personScore;
     det.maskCoeffs.resize(protoC);
     for (int k = 0; k < protoC; k++) {
       det.maskCoeffs[k] = data[(4 + nc + k) * N + n];
@@ -219,7 +358,7 @@ HumanContourData PersonSegmenter::detect(const cv::Mat &rgbFrame, int outputWidt
   // ============================================
   // 3. Ultralytics process_mask(..., upsample=true) と同じ順序で
   //    プロトタイプを合成 -> 入力サイズへ拡大 -> logit>0で二値化 -> boxで切る。
-  //    Classicのalphaマスク処理とは独立させる。
+  //    YOLOプロトタイプマスクを復元する。
   // ============================================
   for (int idx : keepIndices) {
     const Detection &det = candidates[idx];
@@ -303,70 +442,6 @@ HumanContourData PersonSegmenter::detect(const cv::Mat &rgbFrame, int outputWidt
     result.boundingBoxes.push_back(ofRectangle(bx, by, bw, bh));
   }
 
-  result.numHumans = static_cast<int>(result.contours.size());
-  return result;
-}
-
-//--------------------------------------------------------------
-HumanContourData PersonSegmenter::detectClassic(const cv::Mat &rgbFrame,
-                                                int outputWidth,
-                                                int outputHeight) {
-  HumanContourData result;
-  // selfie_segmentation.onnx: RGB [1,3,256,256] -> alpha [1,1,256,256].
-  // The original MediaPipe graph resizes without letterboxing and uses 0..1 RGB.
-  cv::Mat blob = cv::dnn::blobFromImage(
-      rgbFrame, 1.0 / 255.0, cv::Size(256, 256),
-      cv::Scalar(0, 0, 0), false, false);
-  classicNet.setInput(blob);
-  cv::Mat alpha = classicNet.forward();
-  if (alpha.dims != 4 || alpha.size[0] != 1 || alpha.size[1] != 1 ||
-      alpha.size[2] != 256 || alpha.size[3] != 256 || alpha.type() != CV_32F) {
-    ofLogError("PersonSegmenter") << "Unexpected Classic model output";
-    return result;
-  }
-
-  cv::Mat alpha256(256, 256, CV_32F, alpha.ptr<float>());
-  cv::Mat alphaSource;
-  cv::resize(alpha256, alphaSource, rgbFrame.size(), 0, 0, cv::INTER_LINEAR);
-  cv::Mat mask;
-  cv::threshold(alphaSource, mask, classicMaskThreshold, 255.0,
-                cv::THRESH_BINARY);
-  mask.convertTo(mask, CV_8U);
-
-  std::vector<std::vector<cv::Point>> contours;
-  cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-  const float scaleX = static_cast<float>(outputWidth) / rgbFrame.cols;
-  const float scaleY = static_cast<float>(outputHeight) / rgbFrame.rows;
-  for (const auto &contour : contours) {
-    if (contour.size() < 3 ||
-        cv::contourArea(contour) * scaleX * scaleY < minContourArea) {
-      continue;
-    }
-    std::vector<glm::vec2> points;
-    points.reserve(contour.size());
-    ofPolyline poly;
-    for (const auto &point : contour) {
-      glm::vec2 scaled(point.x * scaleX, point.y * scaleY);
-      points.push_back(scaled);
-      poly.addVertex(scaled.x, scaled.y);
-    }
-    poly.close();
-    result.contours.push_back(poly.getSmoothed(2));
-    result.contourPoints.push_back(std::move(points));
-
-    const cv::Moments moments = cv::moments(contour);
-    const cv::Rect bounds = cv::boundingRect(contour);
-    const float centerX = moments.m00 > 0.0
-        ? static_cast<float>(moments.m10 / moments.m00)
-        : bounds.x + bounds.width * 0.5f;
-    const float centerY = moments.m00 > 0.0
-        ? static_cast<float>(moments.m01 / moments.m00)
-        : bounds.y + bounds.height * 0.5f;
-    result.centroids.emplace_back(centerX * scaleX, centerY * scaleY);
-    result.boundingBoxes.emplace_back(bounds.x * scaleX, bounds.y * scaleY,
-                                      bounds.width * scaleX,
-                                      bounds.height * scaleY);
-  }
   result.numHumans = static_cast<int>(result.contours.size());
   return result;
 }

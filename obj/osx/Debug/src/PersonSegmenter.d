@@ -495,7 +495,10 @@ obj/osx/Debug/src/PersonSegmenter.o: \
   /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/dnn/utils/../dnn.hpp \
   src/core/HumanContourData.h \
   /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/imgproc.hpp \
-  /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/./imgproc/segmentation.hpp
+  /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/./imgproc/segmentation.hpp \
+  src/../third_party/onnxruntime/include/onnxruntime_c_api.h \
+  src/../third_party/onnxruntime/include/onnxruntime_error_code.h \
+  src/../third_party/onnxruntime/include/onnxruntime_ep_c_api.h
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/SDKSettings.json:
 src/PersonSegmenter.h:
 /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/libs/openFrameworks/ofMain.h:
@@ -993,3 +996,6 @@ src/PersonSegmenter.h:
 src/core/HumanContourData.h:
 /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/imgproc.hpp:
 /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/./imgproc/segmentation.hpp:
+src/../third_party/onnxruntime/include/onnxruntime_c_api.h:
+src/../third_party/onnxruntime/include/onnxruntime_error_code.h:
+src/../third_party/onnxruntime/include/onnxruntime_ep_c_api.h:
