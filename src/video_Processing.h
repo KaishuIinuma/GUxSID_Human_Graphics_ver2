@@ -24,6 +24,7 @@ public:
   // processFps に応じて、必要なタイミングだけ
   // 新しいフレームのセグメンテーション処理を行う。
   void update();
+  void setOutputView(int width, int height, float cropX, float cropY);
 
   // 動画ファイルをロードする。読み込みに成功したら true を返す。
   // 成功時に videoPlayer は自動的に再生開始する。
@@ -74,6 +75,10 @@ private:
   // 実時間ではなく動画フレームを基準に間引くために使う。
   int64_t lastProcessedSampleIndex = -1;
   bool reprocessRequested = false;
+  int outputWidth = 0;
+  int outputHeight = 0;
+  float cropPositionX = 0.5f;
+  float cropPositionY = 0.5f;
 
   void allocateBuffers(int w, int h);
   void processCurrentFrame();

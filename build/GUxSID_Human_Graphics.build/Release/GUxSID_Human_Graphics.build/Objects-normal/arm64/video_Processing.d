@@ -583,4 +583,5 @@ dependencies: \
   /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/src/ofxCvContourFinder.h \
   /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/src/ofxCvHaarFinder.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/core/HumanContourData.h \
-  /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/PersonSegmenter.h
+  /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/PersonSegmenter.h \
+  /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/SourceCrop.h

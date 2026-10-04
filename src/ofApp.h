@@ -152,9 +152,9 @@ public:
   //   動画に合わせてリサイズするために使用する。main.cppで設定される。
   std::shared_ptr<ofAppGLFWWindow> mainWindow;
 
-  // Main Windowの縦横比ロック。RealtimeとVideoの両方を
-  // 一括で制御する。Realtimeはカメラ、Videoは読み込み動画の比率で固定。
-  static inline bool lockMainWindowAspectRatio = true;
+  // 切り抜ける余白の中での位置。中央を初期画角とする。
+  float cropPositionX = 0.5f;
+  float cropPositionY = 0.5f;
 
   ofxPanel gui;
   ofParameterGroup guiParams;
@@ -346,6 +346,8 @@ public:
   int exportHeight = 0;
   float exportScale = 1.0f;
   float exportOffsetX = 0.0f;
+  float exportCropPositionX = 0.5f;
+  float exportCropPositionY = 0.5f;
   double exportFrameRate = 30.0;
   double exportSourceFrameRate = 30.0;
   float exportTimelineStartSeconds = 0.0f;

@@ -1,5 +1,6 @@
 #include "ofApp.h"
 #include "CameraAuthorization.h"
+#include "SourceCrop.h"
 #include <GLFW/glfw3.h> // guiWindow/mainWindowの表示切り替え・リサイズ用
 #include <algorithm>
 #include <cctype>
@@ -95,6 +96,41 @@ void configureBundledDataPath() {
         << ofPathToString(bundledDataPath);
   }
 #endif
+}
+
+void drawSourceCropOverview(const ofTexture &texture, int sourceWidth,
+                            int sourceHeight, const cv::Rect &crop,
+                            int canvasWidth, int canvasHeight) {
+  if (!texture.isAllocated() || crop.empty()) return;
+
+  const float margin = 20.0f;
+  const float availableWidth = std::min(360.0f, canvasWidth * 0.35f);
+  const float availableHeight = std::min(240.0f, canvasHeight * 0.32f);
+  const float scale = std::min(availableWidth / sourceWidth,
+                               availableHeight / sourceHeight);
+  if (scale <= 0.0f) return;
+
+  const float imageWidth = sourceWidth * scale;
+  const float imageHeight = sourceHeight * scale;
+  const float imageX = canvasWidth - margin - imageWidth;
+  const float imageY = canvasHeight - margin - imageHeight;
+  if (imageX < 0.0f || imageY < 25.0f) return;
+
+  ofPushStyle();
+  ofSetColor(255);
+  texture.draw(imageX, imageY, imageWidth, imageHeight);
+  ofNoFill();
+  ofSetLineWidth(2.0f);
+  ofSetColor(255);
+  ofDrawRectangle(imageX, imageY, imageWidth, imageHeight);
+  ofSetLineWidth(3.0f);
+  ofSetColor(0, 255, 255);
+  ofDrawRectangle(imageX + crop.x * scale, imageY + crop.y * scale,
+                  crop.width * scale, crop.height * scale);
+  ofSetColor(255);
+  ofDrawBitmapStringHighlight("SOURCE / CYAN: VISIBLE CROP", imageX,
+                              imageY - 8.0f);
+  ofPopStyle();
 }
 } // namespace
 
@@ -1072,18 +1108,13 @@ void ofApp::onRealtimeChanged(bool &value) {
 
   rebuildGuiPanel();
 
-  // ★追加: Realtimeモード（カメラ入力）に戻った時、
-  // ウィンドウサイズをカメラの解像度 (W, H) に戻す
+  // Realtimeへ戻る際は既定サイズにする。比率はユーザーが変更できる。
   if (realtimeMode && mainWindow && mainWindow->getGLFWWindow()) {
     GLFWwindow *handle = mainWindow->getGLFWWindow();
-    // Videoモードの古い制約を解除してからサイズを戻す。
     glfwSetWindowAspectRatio(handle, GLFW_DONT_CARE, GLFW_DONT_CARE);
     // setWindowShape() を通し、Retinaの論理サイズと物理ピクセルの
     // 変換をopenFrameworks側に任せる。
     mainWindow->setWindowShape(W, H);
-    if (lockMainWindowAspectRatio) {
-      glfwSetWindowAspectRatio(handle, W, H);
-    }
   }
   saveGuiSettings();
 }
@@ -1135,6 +1166,8 @@ void ofApp::startImageSequenceExport() {
   // ofGetWidth()/ofGetHeight() はControlsのサイズを返す可能性がある。
   exportCanvasWidth = mainWindow->getWidth();
   exportCanvasHeight = mainWindow->getHeight();
+  exportCropPositionX = cropPositionX;
+  exportCropPositionY = cropPositionY;
   if (exportCanvasWidth <= 0 || exportCanvasHeight <= 0) {
     pVideoStatusText = "Export failed: invalid Main Window size";
     return;
@@ -1311,8 +1344,12 @@ void ofApp::updateImageSequenceExport() {
       cancelImageSequenceExport();
       return;
     }
+    const cv::Rect crop = sourceCrop(exportSourceWidth, exportSourceHeight,
+                                      exportCanvasWidth, exportCanvasHeight,
+                                      exportCropPositionX, exportCropPositionY);
+    if (crop.empty()) return;
     exportDecodedData = personSegmenter.detect(
-        rgbMat, exportCanvasWidth, exportCanvasHeight);
+        rgbMat(crop), exportCanvasWidth, exportCanvasHeight);
   }
 
   const float exportElapsedSeconds = exportTimelineStartSeconds +
@@ -1443,7 +1480,7 @@ void ofApp::updateMovieExport() {
 }
 
 //--------------------------------------------------------------
-// メインウィンドウの大きさ・縦横比を、読み込んだ動画に合わせる
+// 動画を開いた時のMain Windowサイズを入力動画に合わせる
 //--------------------------------------------------------------
 void ofApp::resizeMainWindowToVideo() {
   if (!mainWindow) return;
@@ -1463,11 +1500,6 @@ void ofApp::resizeMainWindowToVideo() {
   // glfwSetWindowSize() へ渡すとRetina上で論理サイズとして
   // 扱われるため、openFrameworksの倍率変換を通す。
   mainWindow->setWindowShape(w, h);
-  // 動画モード中はユーザーがサイズを変えても、
-  // 読み込み済み動画の縦横比を維持する。
-  if (lockMainWindowAspectRatio) {
-    glfwSetWindowAspectRatio(handle, w, h);
-  }
 }
 
 //--------------------------------------------------------------
@@ -1490,8 +1522,10 @@ void ofApp::onGuiWindowFileDragged(ofDragInfo &dragInfo) {
 
 //--------------------------------------------------------------
 void ofApp::onGuiWindowKeyPressed(ofKeyEventArgs &args) {
-  // DキーはMain Windowと同じデバッグ表示切り替え処理へ渡す。
-  if (args.key == 'd' || args.key == 'D') {
+  // Controlsにフォーカスがある時も画角移動とデバッグ切り替えを受け付ける。
+  if (args.key == 'd' || args.key == 'D' ||
+      args.key == OF_KEY_LEFT || args.key == OF_KEY_RIGHT ||
+      args.key == OF_KEY_UP || args.key == OF_KEY_DOWN) {
     keyPressed(args.key);
   }
   // Main Windowが閉じられていてもControls Windowは残るため、
@@ -1607,17 +1641,6 @@ void ofApp::showMainWindow() {
   mainWindow = std::dynamic_pointer_cast<ofAppGLFWWindow>(newMainWindow);
   if (!mainWindow) return;
   mainWindow->events().setFrameRate(pMainWindowTargetFps.get());
-
-  GLFWwindow *handle = mainWindow->getGLFWWindow();
-  if (handle) {
-    if (!realtimeMode && videoProcessor.isLoaded() &&
-        lockMainWindowAspectRatio) {
-      glfwSetWindowAspectRatio(handle, videoProcessor.getVideoWidth(),
-                               videoProcessor.getVideoHeight());
-    } else if (realtimeMode && lockMainWindowAspectRatio) {
-      glfwSetWindowAspectRatio(handle, W, H);
-    }
-  }
 
   // ofRunAppはsetup()を再度呼ぶため、既に動作中のアプリを初期化し直さないよう
   // 必要なイベントだけを新しいMain Windowへ接続する。
@@ -1738,8 +1761,12 @@ void ofApp::update() {
             frameHeight, frameWidth, CV_8UC3,
             colorImg.getPixels().getData()).clone();
 
-        const int outW = ofGetWidth();
-        const int outH = ofGetHeight();
+        const int outW = mainWindow ? mainWindow->getWidth() : ofGetWidth();
+        const int outH = mainWindow ? mainWindow->getHeight() : ofGetHeight();
+        const cv::Rect crop = sourceCrop(frameWidth, frameHeight, outW, outH,
+                                          cropPositionX, cropPositionY);
+        if (crop.empty()) return;
+        frame = frame(crop).clone();
 
         detectionFuture = std::async(
             std::launch::async,
@@ -1754,6 +1781,11 @@ void ofApp::update() {
     // Realtime=false: ドロップされた動画ファイルを処理する
     // (処理の実体はVideoProcessingクラスに分離している)
     // ============================================
+    if (mainWindow) {
+      videoProcessor.setOutputView(mainWindow->getWidth(),
+                                   mainWindow->getHeight(),
+                                   cropPositionX, cropPositionY);
+    }
     videoProcessor.update();
   }
 
@@ -1786,17 +1818,37 @@ void ofApp::draw() {
 //--------------------------------------------------------------
 void ofApp::drawDebug() {
   ofPushStyle();
+  const int canvasWidth = mainWindow ? mainWindow->getWidth() : ofGetWidth();
+  const int canvasHeight = mainWindow ? mainWindow->getHeight() : ofGetHeight();
+  cv::Rect visibleCrop;
+  const ofTexture *sourceTexture = nullptr;
+  int sourceWidth = 0;
+  int sourceHeight = 0;
 
   // 背景に半透明の黒幕を敷く（グラフィックの上に見やすく重ねるため）
   ofSetColor(0, 0, 0, 210);
   ofFill();
-  ofDrawRectangle(0, 0, ofGetWidth(), ofGetHeight());
+  ofDrawRectangle(0, 0, canvasWidth, canvasHeight);
 
   ofSetColor(255);
 
   if (realtimeMode) {
     // カメラ実写を表示
-    colorImg.draw(0, 0, W, H);
+    const cv::Rect crop = sourceCrop(colorImg.getWidth(), colorImg.getHeight(),
+                                      canvasWidth, canvasHeight,
+                                      cropPositionX, cropPositionY);
+    if (!crop.empty()) {
+      // ofxCvImage は通常 draw() 時に CPU 画素をテクスチャへ転送する。
+      // drawSubsection() で直接描く場合は明示的な更新が必要。
+      colorImg.updateTexture();
+      colorImg.getTexture().drawSubsection(
+          0, 0, canvasWidth, canvasHeight,
+          crop.x, crop.y, crop.width, crop.height);
+      visibleCrop = crop;
+      sourceTexture = &colorImg.getTexture();
+      sourceWidth = colorImg.getWidth();
+      sourceHeight = colorImg.getHeight();
+    }
 
     // ★変更: contourFinderのブロブではなく、
     //   PersonSegmenterが出したhumanData(人物ごとの輪郭)をオーバーレイする
@@ -1814,7 +1866,18 @@ void ofApp::drawDebug() {
   } else {
     // 動画モード時は、読み込んでいる動画のプレビューを表示する
     if (videoProcessor.isLoaded()) {
-      videoProcessor.videoPlayer.draw(0, 0, videoProcessor.getVideoWidth(), videoProcessor.getVideoHeight());
+      const cv::Rect crop = sourceCrop(
+          videoProcessor.getVideoWidth(), videoProcessor.getVideoHeight(),
+          canvasWidth, canvasHeight, cropPositionX, cropPositionY);
+      if (!crop.empty()) {
+        videoProcessor.videoPlayer.getTexture().drawSubsection(
+            0, 0, canvasWidth, canvasHeight,
+            crop.x, crop.y, crop.width, crop.height);
+        visibleCrop = crop;
+        sourceTexture = &videoProcessor.videoPlayer.getTexture();
+        sourceWidth = videoProcessor.getVideoWidth();
+        sourceHeight = videoProcessor.getVideoHeight();
+      }
 
       ofNoFill();
       ofSetLineWidth(4);
@@ -1830,6 +1893,11 @@ void ofApp::drawDebug() {
     }
   }
 
+  if (sourceTexture) {
+    drawSourceCropOverview(*sourceTexture, sourceWidth, sourceHeight,
+                           visibleCrop, canvasWidth, canvasHeight);
+  }
+
   // ステータスと操作ガイド
   string info = "=== [DEBUG MODE] Person Detection ===\n";
   info += "Model: YOLO11-seg CoreML GPU\n";
@@ -1841,17 +1909,28 @@ void ofApp::drawDebug() {
             ofToString(colorImg.getHeight()) + "\n";
     info += "AI model loaded: " + string(personSegmenter.isLoaded() ? "Yes" : "No") + "\n";
     info += "Detected People: " + ofToString(humanData.numHumans) + "\n";
-    info += "Threshold: " + ofToString(activeThreshold, 2) + " [UP/DOWN: Adjust]\n";
+    info += "Threshold: " + ofToString(activeThreshold, 2) + "\n";
   } else {
     info += "Detected People: " + ofToString(videoProcessor.humanData.numHumans) + "\n";
-    info += "Threshold: " + ofToString(activeThreshold, 2) + " [UP/DOWN: Adjust]\n";
+    info += "Threshold: " + ofToString(activeThreshold, 2) + "\n";
     info += "Target FPS: " + ofToString(pMainWindowTargetFps.get()) + "\n";
     info += "Playing: " + string(videoProcessor.isVideoPlaying() ? "Yes" : "No (Paused)") + "\n";
   }
   info += "Scene Selection: '1' -> Scene 1\n";
+  info += "Crop position: Arrow keys\n";
+  if (!visibleCrop.empty()) {
+    info += "Visible source: (" + ofToString(visibleCrop.x) + ", " +
+            ofToString(visibleCrop.y) + ") " +
+            ofToString(visibleCrop.width) + " x " +
+            ofToString(visibleCrop.height) + "\n";
+    info += "Movable: X " +
+            string(visibleCrop.width < sourceWidth ? "Yes" : "No") +
+            " / Y " +
+            string(visibleCrop.height < sourceHeight ? "Yes" : "No") + "\n";
+  }
   info += "Press 'D' to CLOSE this debug overlay.";
 
-  ofDrawBitmapStringHighlight(info, 20, H + 25);
+  ofDrawBitmapStringHighlight(info, 20, 25);
 
   ofPopStyle();
 }
@@ -1875,11 +1954,41 @@ void ofApp::keyPressed(int key) {
   // （GUIのスライダーと同じofParameterを操作するので、
   //   キーで動かすとバー側の表示にも即座に反映される）
   // ============================================
-  // YOLO検出の閾値 (UP/DOWN, 0.0〜1.0)
-  else if (key == OF_KEY_UP) {
-    pYoloConfidence = std::min(1.0f, pYoloConfidence.get() + 0.05f);
-  } else if (key == OF_KEY_DOWN) {
-    pYoloConfidence = std::max(0.0f, pYoloConfidence.get() - 0.05f);
+  // 余白内の画角を5%ずつ移動する。切り抜きがない方向では動かさない。
+  else if (key == OF_KEY_LEFT || key == OF_KEY_RIGHT ||
+           key == OF_KEY_UP || key == OF_KEY_DOWN) {
+    const int sourceWidth = realtimeMode ? colorImg.getWidth()
+                                         : videoProcessor.getVideoWidth();
+    const int sourceHeight = realtimeMode ? colorImg.getHeight()
+                                          : videoProcessor.getVideoHeight();
+    const int canvasWidth = mainWindow ? mainWindow->getWidth() : 0;
+    const int canvasHeight = mainWindow ? mainWindow->getHeight() : 0;
+    const cv::Rect crop = sourceCrop(sourceWidth, sourceHeight,
+                                      canvasWidth, canvasHeight,
+                                      cropPositionX, cropPositionY);
+    if (crop.empty()) return;
+
+    constexpr float step = 0.05f;
+    const float oldX = cropPositionX;
+    const float oldY = cropPositionY;
+    if (crop.width < sourceWidth && key == OF_KEY_LEFT) {
+      cropPositionX = std::max(0.0f, cropPositionX - step);
+    } else if (crop.width < sourceWidth && key == OF_KEY_RIGHT) {
+      cropPositionX = std::min(1.0f, cropPositionX + step);
+    } else if (crop.height < sourceHeight && key == OF_KEY_UP) {
+      cropPositionY = std::max(0.0f, cropPositionY - step);
+    } else if (crop.height < sourceHeight && key == OF_KEY_DOWN) {
+      cropPositionY = std::min(1.0f, cropPositionY + step);
+    }
+    if (cropPositionX != oldX || cropPositionY != oldY) {
+      if (realtimeMode) {
+        finishRealtimeDetection(false);
+        lastRealtimeProcessMs = 0;
+      } else {
+        videoProcessor.setOutputView(canvasWidth, canvasHeight,
+                                     cropPositionX, cropPositionY);
+      }
+    }
   }
   // 頂点数 ('[' / ']', 4〜100)
   else if (key == '[') {

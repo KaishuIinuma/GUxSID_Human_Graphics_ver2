@@ -581,7 +581,7 @@ obj/osx/Debug/src/video_Processing.o: \
   /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/src/ofxCvShortImage.h \
   /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/src/ofxCvContourFinder.h \
   /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/src/ofxCvHaarFinder.h \
-  src/core/HumanContourData.h src/PersonSegmenter.h
+  src/core/HumanContourData.h src/PersonSegmenter.h src/SourceCrop.h
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/SDKSettings.json:
 src/video_Processing.h:
 /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/libs/openFrameworks/ofMain.h:
@@ -1166,3 +1166,4 @@ src/video_Processing.h:
 /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/src/ofxCvHaarFinder.h:
 src/core/HumanContourData.h:
 src/PersonSegmenter.h:
+src/SourceCrop.h:

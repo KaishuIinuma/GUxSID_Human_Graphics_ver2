@@ -1,4 +1,5 @@
 #include "video_Processing.h"
+#include "SourceCrop.h"
 #include <cmath>
 #include <opencv2/imgproc.hpp>
 
@@ -90,6 +91,17 @@ void VideoProcessing::requestReprocess() {
   reprocessRequested = true;
 }
 
+void VideoProcessing::setOutputView(int width, int height, float cropX,
+                                    float cropY) {
+  if (outputWidth == width && outputHeight == height &&
+      cropPositionX == cropX && cropPositionY == cropY) return;
+  outputWidth = width;
+  outputHeight = height;
+  cropPositionX = cropX;
+  cropPositionY = cropY;
+  requestReprocess();
+}
+
 //--------------------------------------------------------------
 void VideoProcessing::update() {
   if (!loaded) return;
@@ -162,5 +174,8 @@ void VideoProcessing::processCurrentFrame() {
     return;
   }
 
-  humanData = segmenterPtr->detect(rgbMat, ofGetWidth(), ofGetHeight());
+  const cv::Rect crop = sourceCrop(videoWidth, videoHeight, outputWidth,
+                                    outputHeight, cropPositionX, cropPositionY);
+  if (crop.empty()) return;
+  humanData = segmenterPtr->detect(rgbMat(crop), outputWidth, outputHeight);
 }

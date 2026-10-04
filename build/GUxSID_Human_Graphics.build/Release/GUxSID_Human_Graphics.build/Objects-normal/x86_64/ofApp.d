@@ -627,4 +627,5 @@ dependencies: \
   src/core/HumanContourData.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/video_Processing.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/CameraAuthorization.h \
+  /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/SourceCrop.h \
   /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/libs/glfw/include/GLFW/glfw3.h
