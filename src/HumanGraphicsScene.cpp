@@ -19,6 +19,7 @@ void HumanGraphicsScene::setup() {
   geometryObjects.clear();
   sceneObjects.clear();
   materialAssignmentSystem.reset();
+  proximityPairing.reset();
   renderRecipe = std::make_shared<gux::StandardRenderRecipe>();
   mergeEvent = std::make_shared<gux::StandardMergeEvent>();
   sceneLayout = std::make_shared<gux::StandardSceneLayout>();
@@ -52,6 +53,8 @@ void HumanGraphicsScene::update(const HumanContourData& humanData,
         geometryProcessor.process(trackedObjects, geometrySettings());
     sceneObjects =
         sceneComposer.compose(geometryObjects, compositionSettings());
+    // ペアで動く・描くモードでは、近いObject同士が隣り合うよう並べ替える。
+    if (usesObjectPairs()) proximityPairing.reorder(sceneObjects);
 
     const bool isMerged = sceneObjects.size() < geometryObjects.size();
     mergeJustStarted = isMerged && !mergeActive;
@@ -115,6 +118,11 @@ void HumanGraphicsScene::setLockedPaletteIndices(
   materialAssignmentSystem.reset();
 }
 
+bool HumanGraphicsScene::usesObjectPairs() const {
+  return renderRecipeId() == gux::FloatingBridgeRenderRecipe::RecipeId ||
+         sceneBehaviorId() == gux::FloatingSceneBehavior::BehaviorId;
+}
+
 int HumanGraphicsScene::activeCanvasWidth() const {
   return canvasWidth > 0 ? canvasWidth : ofGetWidth();
 }
@@ -124,6 +132,8 @@ int HumanGraphicsScene::activeCanvasHeight() const {
 }
 
 void HumanGraphicsScene::setRenderRecipe(const std::string& recipeId) {
+  // ペア並べ替えの要否がRecipeで変わるため、Compositionからやり直す。
+  hasPipelineSignature = false;
   if (recipeId == gux::MixRenderRecipe::RecipeId) {
     renderRecipe = std::make_shared<gux::MixRenderRecipe>();
     return;
@@ -252,7 +262,7 @@ gux::GeometrySettings HumanGraphicsScene::geometrySettings() const {
 
 gux::CompositionSettings HumanGraphicsScene::compositionSettings() const {
   gux::CompositionSettings settings;
-  // 再配置とペア接続では検知順・個体数を保つ必要があるため、事前結合しない。
+  // 再配置とペア接続では並び順・個体数を保つ必要があるため、事前結合しない。
   settings.enableMerge = enableMerge &&
       sceneLayoutId() == gux::StandardSceneLayout::LayoutId &&
       sceneBehaviorId() == gux::StandardSceneBehavior::BehaviorId;

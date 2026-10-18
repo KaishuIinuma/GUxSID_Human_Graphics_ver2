@@ -9,6 +9,7 @@
 #include "render/FloatingBridgeRenderRecipe.h"
 #include "render/StandardRenderRecipe.h"
 #include "scene/FloatingSceneBehavior.h"
+#include "scene/ProximityPairing.h"
 #include "scene/SceneComposer.h"
 #include "scene/StandardSceneBehavior.h"
 #include "scene/StandardSceneLayout.h"
@@ -56,6 +57,7 @@ class HumanGraphicsScene : public BaseScene {
   gux::GeometryProcessor geometryProcessor;
   gux::SceneComposer sceneComposer;
   gux::MaterialAssignmentSystem materialAssignmentSystem;
+  gux::ProximityPairing proximityPairing;
   std::vector<size_t> lockedPaletteIndices;
   // 動画書き出しではHumanGraphicsScene全体をコピーするため、Recipeは共有所有にする。
   // Recipe自体は状態を持たず、通常描画と書き出し描画で安全に共有できる。
@@ -76,6 +78,7 @@ class HumanGraphicsScene : public BaseScene {
   int canvasWidth = 0;
   int canvasHeight = 0;
 
+  bool usesObjectPairs() const;
   int activeCanvasWidth() const;
   int activeCanvasHeight() const;
   uint64_t detectionSignature(const HumanContourData& humanData) const;

@@ -34,7 +34,7 @@ class FloatingSceneBehavior final : public SceneBehavior {
     const float deltaSeconds = std::clamp(context.deltaSeconds, 0.0f, 0.1f);
     const float response = 1.0f - std::exp(-4.0f * deltaSeconds);
 
-    // 検知順のペアごとに一つの相互作用値を共有する。
+    // 近接順に並んだペアごとに一つの相互作用値を共有する。
     // 位置は鏡像的に応答し、Scaleは一方が大きくなるほど他方が小さくなる。
     for (size_t i = 0; i + 1 < objects.size(); i += 2) {
       auto& first = objects[i];

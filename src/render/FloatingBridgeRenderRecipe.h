@@ -1,6 +1,5 @@
 #pragma once
 
-#include "render/BasePass.h"
 #include "render/RenderRecipe.h"
 #include "render/ShapePainter.h"
 
@@ -10,7 +9,9 @@
 
 namespace gux {
 
-// 検知順の2Objectを、向かい合う輪郭部分から四角形で接続する。
+// 近接順に並んだ2Objectを、向かい合う輪郭部分から四角形で接続する。
+// 各Objectはペアを結ぶ線に垂直な線で二分し、ペアの2人で同じ配色にする。
+// 左のObjectの色を外側(相手と反対側)、右のObjectの色を内側(相手側)に使う。
 class FloatingBridgeRenderRecipe final : public RenderRecipe {
  public:
   static constexpr std::string_view RecipeId = "floating_bridge_render";
@@ -23,17 +24,25 @@ class FloatingBridgeRenderRecipe final : public RenderRecipe {
       drawBridge(objects[i], objects[i + 1], context);
     }
 
-    for (const auto& object : objects) {
-      if (object.geometry.size() < 3) continue;
-      SceneObject solidObject = object;
-      solidObject.appearance.baseMaterial.type = MaterialType::Solid;
-      ofPushMatrix();
-      ofTranslate(object.pivot + object.transform.position);
-      ofRotateDeg(object.transform.rotationDegrees);
-      ofScale(object.transform.scale.x, object.transform.scale.y);
-      ofTranslate(-object.pivot);
-      basePass.draw(solidObject, context);
-      ofPopMatrix();
+    for (size_t i = 0; i + 1 < objects.size(); i += 2) {
+      const SceneObject& first = objects[i];
+      const SceneObject& second = objects[i + 1];
+      // 浮遊の揺れで左右が入れ替わらないよう、輪郭由来のpivotで左右を決める。
+      const bool firstIsLeft = first.pivot.x <= second.pivot.x;
+      const ofColor& outerColor = firstIsLeft
+          ? first.appearance.baseMaterial.primary
+          : second.appearance.baseMaterial.primary;
+      const ofColor& innerColor = firstIsLeft
+          ? second.appearance.baseMaterial.primary
+          : first.appearance.baseMaterial.primary;
+      drawObject(first, &second, outerColor, innerColor, context);
+      drawObject(second, &first, outerColor, innerColor, context);
+    }
+
+    // 接続相手のいない最後のObjectは元の色で描く。
+    if (objects.size() % 2 != 0) {
+      const ofColor& color = objects.back().appearance.baseMaterial.primary;
+      drawObject(objects.back(), nullptr, color, color, context);
     }
   }
 
@@ -90,14 +99,72 @@ class FloatingBridgeRenderRecipe final : public RenderRecipe {
     return result;
   }
 
+  static glm::vec2 worldCenter(const SceneObject& object) {
+    return object.pivot + object.transform.position;
+  }
+
+  // 半平面 dot(p - origin, normal) >= 0 で多角形を切り取る(Sutherland-Hodgman)。
+  static ofPolyline clipHalfPlane(const ofPolyline& polygon,
+                                  const glm::vec2& origin,
+                                  const glm::vec2& normal) {
+    ofPolyline result;
+    const size_t count = polygon.size();
+    for (size_t i = 0; i < count; ++i) {
+      const glm::vec2 current(polygon[i].x, polygon[i].y);
+      const glm::vec2 next(polygon[(i + 1) % count].x,
+                           polygon[(i + 1) % count].y);
+      const float currentSide = glm::dot(current - origin, normal);
+      const float nextSide = glm::dot(next - origin, normal);
+      if (currentSide >= 0.0f) result.addVertex(current.x, current.y);
+      if ((currentSide >= 0.0f) != (nextSide >= 0.0f)) {
+        const float t = currentSide / (currentSide - nextSide);
+        const glm::vec2 crossing = glm::mix(current, next, t);
+        result.addVertex(crossing.x, crossing.y);
+      }
+    }
+    result.setClosed(true);
+    return result;
+  }
+
+  void drawObject(const SceneObject& object, const SceneObject* partner,
+                  const ofColor& outerColor, const ofColor& innerColor,
+                  const RenderContext&) const {
+    if (object.geometry.size() < 3) return;
+    ofPushMatrix();
+    ofTranslate(object.pivot + object.transform.position);
+    ofRotateDeg(object.transform.rotationDegrees);
+    ofScale(object.transform.scale.x, object.transform.scale.y);
+    ofTranslate(-object.pivot);
+    shapePainter.drawFill(object.geometry, outerColor);
+
+    if (partner != nullptr && innerColor != outerColor) {
+      const glm::vec2 difference = worldCenter(*partner) - worldCenter(object);
+      if (glm::length(difference) >= 1.0f) {
+        // ワールド方向をObjectローカルへ写す。中心はローカルではpivotになり、
+        // 半平面の法線は S * R^T * direction になる。
+        const glm::vec2 direction = glm::normalize(difference);
+        const float radians = glm::radians(object.transform.rotationDegrees);
+        const float cosine = std::cos(radians);
+        const float sine = std::sin(radians);
+        const glm::vec2 unrotated(direction.x * cosine + direction.y * sine,
+                                  -direction.x * sine + direction.y * cosine);
+        const glm::vec2 localNormal = unrotated * object.transform.scale;
+        if (glm::length(localNormal) > 0.0001f) {
+          const ofPolyline facingHalf =
+              clipHalfPlane(object.geometry, object.pivot, localNormal);
+          shapePainter.drawFill(facingHalf, innerColor);
+        }
+      }
+    }
+    ofPopMatrix();
+  }
+
   void drawBridge(const SceneObject& first, const SceneObject& second,
                   const RenderContext& context) const {
     const ofPolyline firstGeometry = transformedGeometry(first);
     const ofPolyline secondGeometry = transformedGeometry(second);
-    const glm::vec2 firstCenter =
-        first.pivot + first.transform.position;
-    const glm::vec2 secondCenter =
-        second.pivot + second.transform.position;
+    const glm::vec2 firstCenter = worldCenter(first);
+    const glm::vec2 secondCenter = worldCenter(second);
     const glm::vec2 difference = secondCenter - firstCenter;
     if (glm::length(difference) < 1.0f) return;
     const glm::vec2 direction = glm::normalize(difference);
@@ -119,7 +186,6 @@ class FloatingBridgeRenderRecipe final : public RenderRecipe {
                             StrokeJoinType::Straight);
   }
 
-  BasePass basePass;
   ShapePainter shapePainter;
 };
 
