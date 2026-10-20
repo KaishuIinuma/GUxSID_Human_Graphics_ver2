@@ -10,8 +10,7 @@
 namespace gux {
 
 // 近いObject同士を2個ずつ組にし、組が連続するようobjectsを並べ替える。
-// FloatingSceneBehaviorとFloatingBridgeRenderRecipeは(0,1),(2,3)...の並びを
-// ペアとして扱うため、ここで並びを決めれば両者の組み合わせが一致する。
+// FloatingBridgeRenderRecipeは(0,1),(2,3)...の並びをペアとして扱う。
 class ProximityPairing {
  public:
   void reset() {

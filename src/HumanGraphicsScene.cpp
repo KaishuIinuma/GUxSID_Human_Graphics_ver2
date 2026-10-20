@@ -119,8 +119,7 @@ void HumanGraphicsScene::setLockedPaletteIndices(
 }
 
 bool HumanGraphicsScene::usesObjectPairs() const {
-  return renderRecipeId() == gux::FloatingBridgeRenderRecipe::RecipeId ||
-         sceneBehaviorId() == gux::FloatingSceneBehavior::BehaviorId;
+  return renderRecipeId() == gux::FloatingBridgeRenderRecipe::RecipeId;
 }
 
 int HumanGraphicsScene::activeCanvasWidth() const {
@@ -185,16 +184,12 @@ std::string_view HumanGraphicsScene::sceneLayoutId() const {
 }
 
 void HumanGraphicsScene::setSceneBehavior(const std::string& behaviorId) {
-  if (behaviorId == gux::FloatingSceneBehavior::BehaviorId) {
-    sceneBehavior = std::make_shared<gux::FloatingSceneBehavior>();
-  } else {
-    if (behaviorId != gux::StandardSceneBehavior::BehaviorId) {
-      ofLogWarning("HumanGraphicsScene")
-          << "Unknown Behavior ID: " << behaviorId << ". Falling back to "
-          << gux::StandardSceneBehavior::BehaviorId;
-    }
-    sceneBehavior = std::make_shared<gux::StandardSceneBehavior>();
+  if (behaviorId != gux::StandardSceneBehavior::BehaviorId) {
+    ofLogWarning("HumanGraphicsScene")
+        << "Unknown Behavior ID: " << behaviorId << ". Falling back to "
+        << gux::StandardSceneBehavior::BehaviorId;
   }
+  sceneBehavior = std::make_shared<gux::StandardSceneBehavior>();
   sceneBehavior->reset();
   hasPipelineSignature = false;
 }
@@ -265,7 +260,8 @@ gux::CompositionSettings HumanGraphicsScene::compositionSettings() const {
   // 再配置とペア接続では並び順・個体数を保つ必要があるため、事前結合しない。
   settings.enableMerge = enableMerge &&
       sceneLayoutId() == gux::StandardSceneLayout::LayoutId &&
-      sceneBehaviorId() == gux::StandardSceneBehavior::BehaviorId;
+      sceneBehaviorId() == gux::StandardSceneBehavior::BehaviorId &&
+      !usesObjectPairs();
   settings.enableBase = enableBase;
   settings.enableOffset = enableOffset;
   settings.enableStroke = enableStroke;

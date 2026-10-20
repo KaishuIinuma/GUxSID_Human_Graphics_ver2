@@ -617,11 +617,10 @@ dependencies: \
   src/render/StrokePass.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/render/FloatingBridgeRenderRecipe.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/render/StandardRenderRecipe.h \
-  /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/scene/FloatingSceneBehavior.h \
-  src/scene/SceneBehavior.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/scene/ProximityPairing.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/scene/SceneComposer.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/scene/StandardSceneBehavior.h \
+  src/scene/SceneBehavior.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/scene/StandardSceneLayout.h \
   src/scene/SceneLayout.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/tracking/ObjectTracker.h \

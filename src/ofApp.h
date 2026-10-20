@@ -281,6 +281,7 @@ public:
 
   // 読み込んだ動画の解像度にメインウィンドウの大きさを合わせる
   void resizeMainWindowToVideo();
+  void applyMainWindowAspectLock();
 
   // dragEvent / onGuiWindowFileDragged の両方から呼ばれる共通処理
   void handleDroppedFile(const ofDragInfo &dragInfo);
@@ -359,6 +360,9 @@ public:
   std::string exportMovieCodecName;
   std::future<std::string> exportMovieFuture;
   ofVideoPlayer exportVideoPlayer;
+  // 静止画の書き出しでは、動画デコードの代わりにこの画素を1枚だけ使う。
+  bool exportFromStillImage = false;
+  ofPixels exportStillPixels;
   ofFbo exportFbo;
   ofPixels exportPixels;
   std::shared_ptr<HumanGraphicsScene> exportScene;

@@ -1,5 +1,7 @@
 #include "video_Processing.h"
 #include "SourceCrop.h"
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <opencv2/imgproc.hpp>
 
@@ -9,7 +11,38 @@ void VideoProcessing::setup(PersonSegmenter *segmenter) {
 }
 
 //--------------------------------------------------------------
+bool VideoProcessing::isStillImagePath(const std::string &path) {
+  std::string extension = ofFilePath::getFileExt(path);
+  std::transform(extension.begin(), extension.end(), extension.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
+  return extension == "jpg" || extension == "jpeg" || extension == "png";
+}
+
+//--------------------------------------------------------------
 bool VideoProcessing::loadVideo(const std::string &path) {
+  if (isStillImagePath(path)) {
+    if (!stillImage.load(path)) {
+      ofLogError("VideoProcessing") << "画像の読み込みに失敗しました: " << path;
+      loaded = false;
+      return false;
+    }
+    videoPlayer.close();
+    stillMode = true;
+    videoWidth = stillImage.getWidth();
+    videoHeight = stillImage.getHeight();
+    loadedFileName = path;
+    allocateBuffers(videoWidth, videoHeight);
+    humanData = HumanContourData();
+    // 静止画は読み込み直後(と表示範囲の変更時)に1回だけ検出する。
+    playing = false;
+    loaded = true;
+    lastProcessedSampleIndex = -1;
+    reprocessRequested = true;
+    ofLogNotice("VideoProcessing") << "画像を読み込みました: " << path
+                                    << " (" << videoWidth << "x" << videoHeight << ")";
+    return true;
+  }
+
   bool ok = videoPlayer.load(path);
   if (!ok) {
     ofLogError("VideoProcessing") << "動画の読み込みに失敗しました: " << path;
@@ -17,6 +50,8 @@ bool VideoProcessing::loadVideo(const std::string &path) {
     return false;
   }
 
+  stillMode = false;
+  stillImage.clear();
   videoWidth = videoPlayer.getWidth();
   videoHeight = videoPlayer.getHeight();
   loadedFileName = path;
@@ -47,8 +82,18 @@ void VideoProcessing::allocateBuffers(int w, int h) {
 }
 
 //--------------------------------------------------------------
+const ofTexture& VideoProcessing::getTexture() const {
+  return stillMode ? stillImage.getTexture() : videoPlayer.getTexture();
+}
+
+//--------------------------------------------------------------
+const ofPixels& VideoProcessing::getPixels() const {
+  return stillMode ? stillImage.getPixels() : videoPlayer.getPixels();
+}
+
+//--------------------------------------------------------------
 void VideoProcessing::play() {
-  if (!loaded) return;
+  if (!loaded || stillMode) return;
   videoPlayer.setVolume(0.0f);
   videoPlayer.setSpeed(playbackSpeed);
   videoPlayer.setPaused(false);
@@ -58,14 +103,14 @@ void VideoProcessing::play() {
 
 //--------------------------------------------------------------
 void VideoProcessing::pause() {
-  if (!loaded) return;
+  if (!loaded || stillMode) return;
   videoPlayer.setPaused(true);
   playing = false;
 }
 
 //--------------------------------------------------------------
 void VideoProcessing::restart() {
-  if (!loaded) return;
+  if (!loaded || stillMode) return;
   videoPlayer.setVolume(0.0f);
   videoPlayer.setPosition(0.0f);
   videoPlayer.play();
@@ -78,7 +123,7 @@ void VideoProcessing::restart() {
 //--------------------------------------------------------------
 void VideoProcessing::setPlaybackSpeed(float speed) {
   playbackSpeed = ofClamp(speed, 0.1f, 2.0f);
-  if (!loaded) return;
+  if (!loaded || stillMode) return;
 
   videoPlayer.setSpeed(playbackSpeed);
   // AVFoundationのsetSpeedは一時停止中のプレイヤーを再開するため、
@@ -106,16 +151,16 @@ void VideoProcessing::setOutputView(int width, int height, float cropX,
 void VideoProcessing::update() {
   if (!loaded) return;
 
-  videoPlayer.update();
+  if (!stillMode) videoPlayer.update();
 
-  if (reprocessRequested && videoPlayer.getPixels().isAllocated()) {
+  if (reprocessRequested && getPixels().isAllocated()) {
     reprocessRequested = false;
     processCurrentFrame();
     // 再生中は次の新規フレームを通常のサンプル間隔で処理する。
     return;
   }
 
-  if (!playing) return;
+  if (!playing || stillMode) return;
 
   if (!videoPlayer.isFrameNew()) return;
 
@@ -148,7 +193,7 @@ void VideoProcessing::processCurrentFrame() {
   //   PersonSegmenter(YOLO11-seg)へのdetect()呼び出し一発に簡素化。
   //   人物ごとの輪郭・重心・外接矩形をまとめて返してくれる。
   // ============================================
-  const ofPixels& framePixels = videoPlayer.getPixels();
+  const ofPixels& framePixels = getPixels();
   if (!framePixels.isAllocated() ||
       framePixels.getWidth() != videoWidth ||
       framePixels.getHeight() != videoHeight) {

@@ -67,12 +67,15 @@ palette assignment, GUI values, and video export flow are retained.
 then overlays a solid Stroke using the current background color. Presets select
 the active Recipe through `Recipe_ID`.
 
-`floating_bridge.json` combines `floating_behavior` with
-`floating_bridge_render`; objects are paired in detection order and their
-bridge is drawn behind the object fills. Each bridge uses the two contour
-vertices that are farthest apart on the axis perpendicular to the line between
-the paired object centers. Paired motion uses shared and mirrored displacement,
-with reciprocal scale changes, instead of independent noise motion.
+`floating_bridge.json` uses `floating_bridge_render` with the static
+`standard_behavior`. `ProximityPairing` pairs nearby objects (with a small bias
+toward keeping the previous pairs) and orders them so each pair is adjacent;
+merging is disabled while this Recipe is active. Each bridge is drawn behind
+the object fills and uses the two contour vertices that are farthest apart on
+the axis perpendicular to the line between the paired object centers. Both
+objects of a pair are split by that perpendicular through their own center:
+the outer half takes the left object's color and the inner half the right
+object's color.
 
 ver2 stores its GUI settings and crash marker under
 `Application Support/GUxSID_Human_Graphics_ver2`, independently from the

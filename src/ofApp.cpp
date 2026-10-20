@@ -328,7 +328,7 @@ void ofApp::setupGuiParameters() {
   playButton.setup("Play");
   pauseButton.setup("Pause");
   restartButton.setup("Restart from beginning");
-  openVideoButton.setup("Open Video...");
+  openVideoButton.setup("Open Video / Image...");
   exportImageSequenceButton.setup("Export Image Sequence");
   savePresetButton.setup("Preset-Save");
   revertPresetButton.setup("Preset-Revert");
@@ -1081,6 +1081,7 @@ void ofApp::onSceneBehaviorIdChanged(string &value) {
         if (activeId != value) {
             ofLogWarning("ofApp") << "Unknown Behavior ID: " << value
                                   << ". Active Behavior: " << activeId;
+            pSceneBehaviorId.setWithoutEventNotifications(activeId);
         }
     }
     saveGuiSettings();
@@ -1104,6 +1105,8 @@ void ofApp::onRealtimeChanged(bool &value) {
     // AVFoundation動画再生との併存によるメモリ破壊を防ぐ。
     cam.close();
     ofLogNotice("ofApp") << "Videoモードへ移行したためカメラを閉じました。";
+    // 読み込み済みの動画があれば、その比率でMain Windowを固定し直す。
+    applyMainWindowAspectLock();
   }
 
   rebuildGuiPanel();
@@ -1137,7 +1140,7 @@ void ofApp::onRestartPressed() {
 //--------------------------------------------------------------
 void ofApp::onOpenVideoPressed() {
   if (realtimeMode) return;
-  ofFileDialogResult selection = ofSystemLoadDialog("Open Video");
+  ofFileDialogResult selection = ofSystemLoadDialog("Open Video / Image");
   if (!selection.bSuccess) return;
   loadVideoFile(selection.getPath());
 }
@@ -1154,7 +1157,7 @@ void ofApp::startImageSequenceExport() {
     return;
   }
   if (realtimeMode || !videoProcessor.isLoaded() || !humanGraphicsScene) {
-    pVideoStatusText = "Export requires a loaded video in Video mode";
+    pVideoStatusText = "Export requires a loaded video or image in Video mode";
     return;
   }
   if (!mainWindow || !mainWindow->getGLFWWindow()) {
@@ -1173,33 +1176,49 @@ void ofApp::startImageSequenceExport() {
     return;
   }
 
-  if (!exportVideoPlayer.load(videoProcessor.getLoadedFileName())) {
-    pVideoStatusText = "Export failed: could not load source video";
-    return;
-  }
-
-  exportSourceWidth = static_cast<int>(exportVideoPlayer.getWidth());
-  exportSourceHeight = static_cast<int>(exportVideoPlayer.getHeight());
-  exportSourceTotalFrames = exportVideoPlayer.getTotalNumFrames();
-  const double sourceDurationSeconds = exportVideoPlayer.getDuration();
-  exportSourceFrameRate = sourceDurationSeconds > 0.0
-      ? static_cast<double>(exportSourceTotalFrames) / sourceDurationSeconds
-      : 30.0;
   exportFrameRate = static_cast<double>(pMainWindowTargetFps.get());
-  if (!std::isfinite(exportSourceFrameRate) || exportSourceFrameRate <= 0.0) {
-    exportSourceFrameRate = 30.0;
-  }
   if (!std::isfinite(exportFrameRate) || exportFrameRate <= 0.0) {
     exportFrameRate = 30.0;
   }
-  exportTotalFrames = sourceDurationSeconds > 0.0
-      ? std::max(1, static_cast<int>(std::llround(
-            sourceDurationSeconds * exportFrameRate)))
-      : exportSourceTotalFrames;
+
+  exportFromStillImage = videoProcessor.isStillImage();
+  if (exportFromStillImage) {
+    // 静止画は1フレームのPNGだけを書き出し、MOVは作らない。
+    if (!ofLoadImage(exportStillPixels, videoProcessor.getLoadedFileName())) {
+      pVideoStatusText = "Export failed: could not load source image";
+      exportFromStillImage = false;
+      return;
+    }
+    exportSourceWidth = static_cast<int>(exportStillPixels.getWidth());
+    exportSourceHeight = static_cast<int>(exportStillPixels.getHeight());
+    exportSourceTotalFrames = 1;
+    exportSourceFrameRate = exportFrameRate;
+    exportTotalFrames = 1;
+  } else {
+    if (!exportVideoPlayer.load(videoProcessor.getLoadedFileName())) {
+      pVideoStatusText = "Export failed: could not load source video";
+      return;
+    }
+
+    exportSourceWidth = static_cast<int>(exportVideoPlayer.getWidth());
+    exportSourceHeight = static_cast<int>(exportVideoPlayer.getHeight());
+    exportSourceTotalFrames = exportVideoPlayer.getTotalNumFrames();
+    const double sourceDurationSeconds = exportVideoPlayer.getDuration();
+    exportSourceFrameRate = sourceDurationSeconds > 0.0
+        ? static_cast<double>(exportSourceTotalFrames) / sourceDurationSeconds
+        : 30.0;
+    if (!std::isfinite(exportSourceFrameRate) || exportSourceFrameRate <= 0.0) {
+      exportSourceFrameRate = 30.0;
+    }
+    exportTotalFrames = sourceDurationSeconds > 0.0
+        ? std::max(1, static_cast<int>(std::llround(
+              sourceDurationSeconds * exportFrameRate)))
+        : exportSourceTotalFrames;
+  }
   if (exportSourceWidth <= 0 || exportSourceHeight <= 0 ||
       exportSourceTotalFrames <= 0 || exportTotalFrames <= 0) {
     pVideoStatusText = "Export failed: source video has no frames";
-    exportVideoPlayer.close();
+    cancelImageSequenceExport();
     return;
   }
 
@@ -1214,7 +1233,7 @@ void ofApp::startImageSequenceExport() {
   glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
   if (exportHeight > maxTextureSize || evenWidth > maxTextureSize) {
     pVideoStatusText = "Export failed: 3000px canvas exceeds GPU texture limit";
-    exportVideoPlayer.close();
+    cancelImageSequenceExport();
     return;
   }
   exportWidth = static_cast<int>(evenWidth);
@@ -1224,7 +1243,7 @@ void ofApp::startImageSequenceExport() {
   exportFbo.allocate(exportWidth, exportHeight, GL_RGBA);
   if (!exportFbo.isAllocated()) {
     pVideoStatusText = "Export failed: could not allocate 3000px canvas";
-    exportVideoPlayer.close();
+    cancelImageSequenceExport();
     return;
   }
   exportPixels.allocate(exportWidth, exportHeight, OF_PIXELS_RGBA);
@@ -1238,9 +1257,10 @@ void ofApp::startImageSequenceExport() {
   exportPngDirectory = ofFilePath::join(exportOutputDirectory, "png");
   exportMovieDirectory = ofFilePath::join(exportOutputDirectory, "mov");
   if (!ofDirectory::createDirectory(exportPngDirectory, false, true) ||
-      !ofDirectory::createDirectory(exportMovieDirectory, false, true)) {
+      (!exportFromStillImage &&
+       !ofDirectory::createDirectory(exportMovieDirectory, false, true))) {
     pVideoStatusText = "Export failed: could not create output folder";
-    exportVideoPlayer.close();
+    cancelImageSequenceExport();
     return;
   }
 
@@ -1250,15 +1270,17 @@ void ofApp::startImageSequenceExport() {
   // Main Windowのループ再生と色・輪郭の状態を維持できる。
   exportScene = std::make_shared<HumanGraphicsScene>(*humanGraphicsScene);
   exportScene->setCanvasSize(exportCanvasWidth, exportCanvasHeight);
-  // 浮遊Behaviorは時系列状態を持つため、Main側とは独立した状態で書き出す。
+  // Behaviorは時系列状態を持ちうるため、Main側とは独立した状態で書き出す。
   exportScene->setSceneBehavior(
       std::string(humanGraphicsScene->sceneBehaviorId()));
 
-  exportVideoPlayer.setLoopState(OF_LOOP_NONE);
-  // AVFoundationでは停止中のfirstFrame()が新規フレームを通知しない場合が
-  // あるため、最初の1フレームだけ再生状態で確実にデコードする。
-  exportVideoPlayer.play();
-  exportVideoPlayer.firstFrame();
+  if (!exportFromStillImage) {
+    exportVideoPlayer.setLoopState(OF_LOOP_NONE);
+    // AVFoundationでは停止中のfirstFrame()が新規フレームを通知しない場合が
+    // あるため、最初の1フレームだけ再生状態で確実にデコードする。
+    exportVideoPlayer.play();
+    exportVideoPlayer.firstFrame();
+  }
   exportFrameIndex = 0;
   exportDecodedSourceFrame = -1;
   exportDecodedData = HumanContourData();
@@ -1289,7 +1311,13 @@ void ofApp::updateImageSequenceExport() {
 
   // Target FPSがソースFPSより高い場合は同じデコード結果を複数回使い、
   // 低い場合もAVFoundationへの連続シークを避けて1フレームずつ進める。
+  bool decodedNewFrame = false;
   if (exportDecodedSourceFrame != desiredSourceFrame &&
+      !holdDecodedDataForFinalOutput && exportFromStillImage) {
+    // 静止画はデコード待ちがなく、唯一のフレームをそのまま使う。
+    exportDecodedSourceFrame = desiredSourceFrame;
+    decodedNewFrame = true;
+  } else if (exportDecodedSourceFrame != desiredSourceFrame &&
       !holdDecodedDataForFinalOutput) {
     exportVideoPlayer.update();
     if (!exportVideoPlayer.isFrameNew()) {
@@ -1322,8 +1350,12 @@ void ofApp::updateImageSequenceExport() {
       exportFrameWaitStartedAtMillis = ofGetElapsedTimeMillis();
       return;
     }
+    decodedNewFrame = true;
+  }
 
-    const ofPixels& framePixels = exportVideoPlayer.getPixels();
+  if (decodedNewFrame) {
+    const ofPixels& framePixels = exportFromStillImage
+        ? exportStillPixels : exportVideoPlayer.getPixels();
     if (!framePixels.isAllocated()) return;
 
     cv::Mat rgbMat;
@@ -1385,8 +1417,13 @@ void ofApp::updateImageSequenceExport() {
 
   ++exportFrameIndex;
   if (exportFrameIndex >= exportTotalFrames) {
+    const bool fromStillImage = exportFromStillImage;
     cancelImageSequenceExport();
-    startMovieExport();
+    if (fromStillImage) {
+      pVideoStatusText = "Export finished:\n" + outputPath;
+    } else {
+      startMovieExport();
+    }
     return;
   }
 
@@ -1422,6 +1459,8 @@ void ofApp::cancelImageSequenceExport() {
   exportDecodedSourceFrame = -1;
   exportFrameWaitStartedAtMillis = 0;
   exportVideoPlayer.close();
+  exportFromStillImage = false;
+  exportStillPixels.clear();
   exportScene.reset();
 }
 
@@ -1500,6 +1539,24 @@ void ofApp::resizeMainWindowToVideo() {
   // glfwSetWindowSize() へ渡すとRetina上で論理サイズとして
   // 扱われるため、openFrameworksの倍率変換を通す。
   mainWindow->setWindowShape(w, h);
+  applyMainWindowAspectLock();
+}
+
+//--------------------------------------------------------------
+// Videoモードで素材を読み込んでいる間は、Main Windowの縦横比を素材の比率に
+// 固定する。サイズはユーザーが自由に変えられる。それ以外は制約を外す。
+void ofApp::applyMainWindowAspectLock() {
+  if (!mainWindow || !mainWindow->getGLFWWindow()) return;
+  GLFWwindow *handle = mainWindow->getGLFWWindow();
+
+  const int w = videoProcessor.getVideoWidth();
+  const int h = videoProcessor.getVideoHeight();
+  if (realtimeMode || !videoProcessor.isLoaded() || w <= 0 || h <= 0) {
+    glfwSetWindowAspectRatio(handle, GLFW_DONT_CARE, GLFW_DONT_CARE);
+    return;
+  }
+  const int divisor = std::gcd(w, h);
+  glfwSetWindowAspectRatio(handle, w / divisor, h / divisor);
 }
 
 //--------------------------------------------------------------
@@ -1562,7 +1619,9 @@ void ofApp::loadVideoFile(const std::string &path) {
     // 動画の解像度・縦横比にメインウィンドウを合わせる
     resizeMainWindowToVideo();
 
-    pVideoStatusText = "再生中: " + path +
+    pVideoStatusText = string(videoProcessor.isStillImage() ? "表示中: "
+                                                            : "再生中: ") +
+        path +
         " (" + ofToString(videoProcessor.getVideoWidth()) + "x" +
         ofToString(videoProcessor.getVideoHeight()) + ")";
   } else {
@@ -1641,6 +1700,7 @@ void ofApp::showMainWindow() {
   mainWindow = std::dynamic_pointer_cast<ofAppGLFWWindow>(newMainWindow);
   if (!mainWindow) return;
   mainWindow->events().setFrameRate(pMainWindowTargetFps.get());
+  applyMainWindowAspectLock();
 
   // ofRunAppはsetup()を再度呼ぶため、既に動作中のアプリを初期化し直さないよう
   // 必要なイベントだけを新しいMain Windowへ接続する。
@@ -1870,11 +1930,11 @@ void ofApp::drawDebug() {
           videoProcessor.getVideoWidth(), videoProcessor.getVideoHeight(),
           canvasWidth, canvasHeight, cropPositionX, cropPositionY);
       if (!crop.empty()) {
-        videoProcessor.videoPlayer.getTexture().drawSubsection(
+        videoProcessor.getTexture().drawSubsection(
             0, 0, canvasWidth, canvasHeight,
             crop.x, crop.y, crop.width, crop.height);
         visibleCrop = crop;
-        sourceTexture = &videoProcessor.videoPlayer.getTexture();
+        sourceTexture = &videoProcessor.getTexture();
         sourceWidth = videoProcessor.getVideoWidth();
         sourceHeight = videoProcessor.getVideoHeight();
       }
@@ -1914,7 +1974,10 @@ void ofApp::drawDebug() {
     info += "Detected People: " + ofToString(videoProcessor.humanData.numHumans) + "\n";
     info += "Threshold: " + ofToString(activeThreshold, 2) + "\n";
     info += "Target FPS: " + ofToString(pMainWindowTargetFps.get()) + "\n";
-    info += "Playing: " + string(videoProcessor.isVideoPlaying() ? "Yes" : "No (Paused)") + "\n";
+    info += "Playing: " + string(videoProcessor.isStillImage()
+                                     ? "Still Image"
+                                     : videoProcessor.isVideoPlaying()
+                                           ? "Yes" : "No (Paused)") + "\n";
   }
   info += "Scene Selection: '1' -> Scene 1\n";
   info += "Crop position: Arrow keys\n";

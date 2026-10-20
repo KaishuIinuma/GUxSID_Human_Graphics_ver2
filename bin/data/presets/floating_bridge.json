@@ -3,7 +3,7 @@
     "Recipe_ID": "floating_bridge_render",
     "Event_ID": "standard_event",
     "Layout_ID": "standard_layout",
-    "Behavior_ID": "floating_behavior",
+    "Behavior_ID": "standard_behavior",
     "Vertex_Count": "14",
     "Loose_Contour": "0",
     "Loose_Contour_Strength": "7",

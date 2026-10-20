@@ -6,8 +6,9 @@
 #include "PersonSegmenter.h"
 
 // ============================================
-// 動画ファイルを使ったオフライン処理
+// 動画ファイル(またはjpeg/pngの静止画)を使ったオフライン処理
 // (Control WindowのRealtimeチェックボックスがfalseのときに使用)
+// 静止画は1フレームだけの動画として扱い、再生操作は無視する。
 //
 // ofAppが読み込み済みのPersonSegmenter(YOLO11-seg)を
 // ポインタで参照するだけで、モデルの二重読み込みは行わない。
@@ -26,9 +27,10 @@ public:
   void update();
   void setOutputView(int width, int height, float cropX, float cropY);
 
-  // 動画ファイルをロードする。読み込みに成功したら true を返す。
-  // 成功時に videoPlayer は自動的に再生開始する。
+  // 動画ファイルまたは静止画(jpeg/png)をロードする。成功したら true を返す。
+  // 動画は成功時に自動的に再生開始する。
   bool loadVideo(const std::string &path);
+  static bool isStillImagePath(const std::string &path);
 
   // Control Windowの再生・一時停止・最初から再生ボタンから呼ばれる
   void play();
@@ -39,6 +41,11 @@ public:
 
   bool isLoaded() const { return loaded; }
   bool isVideoPlaying() const { return playing; }
+  bool isStillImage() const { return stillMode; }
+
+  // 現在表示しているフレーム(動画の現フレームまたは静止画)。
+  const ofTexture& getTexture() const;
+  const ofPixels& getPixels() const;
 
   int getVideoWidth() const { return videoWidth; }
   int getVideoHeight() const { return videoHeight; }
@@ -64,6 +71,8 @@ private:
 
   bool loaded = false;
   bool playing = true;
+  bool stillMode = false;
+  ofImage stillImage;
 
   int videoWidth = 0;
   int videoHeight = 0;

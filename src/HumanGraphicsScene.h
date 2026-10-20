@@ -8,7 +8,6 @@
 #include "render/MixRenderRecipe.h"
 #include "render/FloatingBridgeRenderRecipe.h"
 #include "render/StandardRenderRecipe.h"
-#include "scene/FloatingSceneBehavior.h"
 #include "scene/ProximityPairing.h"
 #include "scene/SceneComposer.h"
 #include "scene/StandardSceneBehavior.h"
