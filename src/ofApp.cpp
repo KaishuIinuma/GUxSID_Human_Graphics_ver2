@@ -1581,6 +1581,12 @@ void ofApp::applyMainWindowAspectLock() {
   if (!mainWindow || !mainWindow->getGLFWWindow()) return;
   GLFWwindow *handle = mainWindow->getGLFWWindow();
 
+  // 全画面中は画面サイズに合わせるため、比率の制約を外す。
+  if (mainWindow->getWindowMode() == OF_FULLSCREEN) {
+    glfwSetWindowAspectRatio(handle, GLFW_DONT_CARE, GLFW_DONT_CARE);
+    return;
+  }
+
   // 投影余白がONの間は、4K(16:9)の比率に固定して余白の位置を保つ。
   if (pProjectionSafeArea.get()) {
     glfwSetWindowAspectRatio(handle, kProjectionFrameWidth,
@@ -1614,6 +1620,7 @@ void ofApp::onGuiWindowFileDragged(ofDragInfo &dragInfo) {
 void ofApp::onGuiWindowKeyPressed(ofKeyEventArgs &args) {
   // Controlsにフォーカスがある時も画角移動とデバッグ切り替えを受け付ける。
   if (args.key == 'd' || args.key == 'D' ||
+      args.key == 'f' || args.key == 'F' ||
       args.key == OF_KEY_LEFT || args.key == OF_KEY_RIGHT ||
       args.key == OF_KEY_UP || args.key == OF_KEY_DOWN) {
     keyPressed(args.key);
@@ -1946,7 +1953,7 @@ ofRectangle ofApp::mainCanvasRect() const {
     return ofRectangle(0.0f, 0.0f, windowW, windowH);
   }
   // 4K画面に対する投影範囲の割合を、現在のウィンドウサイズに当てはめる。
-  // (4Kフルスクリーンでは、ちょうど中央の3840x960になる)
+  // (4Kフルスクリーンでは、ちょうど中央の3840x990になる)
   const float w = std::round(windowW * kProjectionSafeWidth /
                              static_cast<float>(kProjectionFrameWidth));
   const float h = std::round(windowH * kProjectionSafeHeight /
@@ -1980,6 +1987,20 @@ void ofApp::drawProjectionMargins() {
   ofDrawRectangle(0.0f, r.y, r.x, r.height);                      // 左
   ofDrawRectangle(r.getRight(), r.y, windowW - r.getRight(), r.height);  // 右
   ofPopStyle();
+}
+
+//--------------------------------------------------------------
+void ofApp::toggleMainWindowFullscreen() {
+  if (!mainWindow || !mainWindow->getGLFWWindow()) return;
+  const bool goFullscreen = mainWindow->getWindowMode() != OF_FULLSCREEN;
+  if (goFullscreen) {
+    // 比率の制約が残っていると画面いっぱいに広がらないため、先に外す。
+    glfwSetWindowAspectRatio(mainWindow->getGLFWWindow(),
+                             GLFW_DONT_CARE, GLFW_DONT_CARE);
+  }
+  mainWindow->setFullscreen(goFullscreen);
+  // ウィンドウ表示へ戻った時は、元の比率の制約を掛け直す。
+  if (!goFullscreen) applyMainWindowAspectLock();
 }
 
 //--------------------------------------------------------------
@@ -2099,6 +2120,7 @@ void ofApp::drawDebug() {
   }
   info += "Scene Selection: '1' -> Scene 1\n";
   info += "Crop position: Arrow keys\n";
+  info += "Fullscreen: 'F'\n";
   if (!visibleCrop.empty()) {
     info += "Visible source: (" + ofToString(visibleCrop.x) + ", " +
             ofToString(visibleCrop.y) + ") " +
@@ -2125,6 +2147,10 @@ void ofApp::keyPressed(int key) {
   // 'A' または 'a' キーでControls Windowを前面表示／再生成する
   else if (key == 'a' || key == 'A') {
     showGuiWindow();
+  }
+  // 'F' または 'f' キーでMain Windowの全画面表示を切り替える
+  else if (key == 'f' || key == 'F') {
+    toggleMainWindowFullscreen();
   }
 
   else if (key == '4') {

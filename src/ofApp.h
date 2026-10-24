@@ -126,7 +126,7 @@ public:
 
   // ============================================
   // プロジェクター投影用の余白
-  // 4K(3840x2160)のうち中央3840x960だけが投影されるため、
+  // 4K(3840x2160)のうち中央3840x990だけが投影されるため、
   // ONの間はその範囲だけに描画し、外側を白で塗る。
   // ============================================
   ofParameter<bool> pProjectionSafeArea;
@@ -136,10 +136,12 @@ public:
   int mainCanvasWidth() const;
   int mainCanvasHeight() const;
   void drawProjectionMargins();
+  // Fキー: Main Windowの全画面表示を切り替える
+  void toggleMainWindowFullscreen();
   static constexpr int kProjectionFrameWidth = 3840;
   static constexpr int kProjectionFrameHeight = 2160;
   static constexpr int kProjectionSafeWidth = 3840;
-  static constexpr int kProjectionSafeHeight = 960;
+  static constexpr int kProjectionSafeHeight = 1020;
   int lastSceneCanvasWidth = 0;
   int lastSceneCanvasHeight = 0;
 
