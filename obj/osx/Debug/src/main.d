@@ -611,7 +611,8 @@ obj/osx/Debug/src/main.o: \
   src/render/StandardRenderRecipe.h src/scene/ProximityPairing.h \
   src/scene/SceneComposer.h src/scene/StandardSceneBehavior.h \
   src/scene/SceneBehavior.h src/scene/StandardSceneLayout.h \
-  src/scene/SceneLayout.h src/tracking/ObjectTracker.h \
+  src/scene/SceneLayout.h src/sound/SoundOscSender.h \
+  src/sound/OscUdpSender.h src/tracking/ObjectTracker.h \
   src/video_Processing.h
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/SDKSettings.json:
 src/ofApp.h:
@@ -1242,5 +1243,7 @@ src/scene/StandardSceneBehavior.h:
 src/scene/SceneBehavior.h:
 src/scene/StandardSceneLayout.h:
 src/scene/SceneLayout.h:
+src/sound/SoundOscSender.h:
+src/sound/OscUdpSender.h:
 src/tracking/ObjectTracker.h:
 src/video_Processing.h:

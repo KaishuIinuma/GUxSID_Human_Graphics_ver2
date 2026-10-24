@@ -80,3 +80,28 @@ object's color.
 ver2 stores its GUI settings and crash marker under
 `Application Support/GUxSID_Human_Graphics_ver2`, independently from the
 original project.
+
+## Sound OSC output
+
+`sound/SoundOscSender` sends per-person data over OSC (UDP, `127.0.0.1`,
+port `Sound OSC Port`, default 7400) so an external sound engine (TouchDesigner)
+can react. It is header-only and needs no addon. Positions and size are
+normalized to 0–1 of the canvas; speed is canvas units per second.
+
+| Address | Arguments | When |
+|---|---|---|
+| `/gux/slot/0`…`/gux/slot/15` | active x y size speed group | every frame, all 16 slots (for OSC In CHOP) |
+| `/gux/enter` | id slot x y size | a person appears |
+| `/gux/exit` | id slot | a person has been missing for 0.4 s |
+| `/gux/person` | id x y size speed group | every frame, per person |
+| `/gux/count` | people groups | every frame |
+| `/gux/merge` | idA idB x y | two people stay in one merged shape for 0.15 s |
+| `/gux/split` | idA idB x y | a merged pair stays apart for 0.15 s |
+| `/gux/clear` | — | sending starts or stops |
+
+Each person keeps one slot while visible, so CHOP channels never appear or
+disappear. A freed slot keeps its last position with `active` 0, and the
+slot that has been free longest is reused first, so a fading voice is not
+taken over at once. `group` is the smallest person ID in the merged shape. Membership is found by
+testing each person's contour against the composed shapes, because merged
+SceneObjects carry every source ID.

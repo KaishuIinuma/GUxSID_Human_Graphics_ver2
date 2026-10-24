@@ -12,6 +12,7 @@
 #include "scene/SceneComposer.h"
 #include "scene/StandardSceneBehavior.h"
 #include "scene/StandardSceneLayout.h"
+#include "sound/SoundOscSender.h"
 #include "tracking/ObjectTracker.h"
 
 #include <memory>
@@ -36,6 +37,12 @@ class HumanGraphicsScene : public BaseScene {
   std::string_view sceneLayoutId() const;
   void setSceneBehavior(const std::string& behaviorId);
   std::string_view sceneBehaviorId() const;
+
+  // 音の送信用。人ごとの位置・面積と、合体グループを返す（キャンバスのピクセル単位）。
+  const std::vector<gux::SoundPerson>& soundPeople() const { return soundPeopleList; }
+  glm::vec2 canvasSize() const {
+    return glm::vec2(activeCanvasWidth(), activeCanvasHeight());
+  }
 
   bool enableBase = true;
   bool enableOffset = true;
@@ -68,6 +75,7 @@ class HumanGraphicsScene : public BaseScene {
   std::vector<gux::TrackedObject> trackedObjects;
   std::vector<gux::GeometryObject> geometryObjects;
   std::vector<gux::SceneObject> sceneObjects;
+  std::vector<gux::SoundPerson> soundPeopleList;
 
   uint64_t lastDetectionSignature = 0;
   uint64_t lastPipelineSignature = 0;
@@ -85,4 +93,5 @@ class HumanGraphicsScene : public BaseScene {
   gux::GeometrySettings geometrySettings() const;
   gux::CompositionSettings compositionSettings() const;
   gux::RenderContext renderContext() const;
+  void updateSoundPeople();
 };

@@ -223,6 +223,13 @@ public:
   ofParameter<string> pSceneLayoutId;
   ofParameter<string> pSceneBehaviorId;
 
+  // 音のソフト（TouchDesignerなど）へ人物の情報をOSCで送る。送信先は同じMacの127.0.0.1。
+  ofParameter<bool> pSoundOscEnable;
+  ofParameter<int> pSoundOscPort;
+  gux::SoundOscSender soundOscSender;
+  void onSoundOscEnableChanged(bool &value);
+  void onSoundOscPortChanged(int &value);
+
   // GUIリスナー関数
   void onGraphicsEnableBaseChanged(bool &value);
   void onGraphicsEnableOffsetChanged(bool &value);

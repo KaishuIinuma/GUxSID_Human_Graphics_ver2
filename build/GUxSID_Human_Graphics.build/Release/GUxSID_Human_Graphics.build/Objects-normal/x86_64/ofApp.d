@@ -623,6 +623,8 @@ dependencies: \
   src/scene/SceneBehavior.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/scene/StandardSceneLayout.h \
   src/scene/SceneLayout.h \
+  /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/sound/SoundOscSender.h \
+  src/sound/OscUdpSender.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/tracking/ObjectTracker.h \
   src/core/HumanContourData.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/video_Processing.h \

@@ -611,7 +611,8 @@ obj/osx/Debug/src/ofApp.o: \
   src/render/StandardRenderRecipe.h src/scene/ProximityPairing.h \
   src/scene/SceneComposer.h src/scene/StandardSceneBehavior.h \
   src/scene/SceneBehavior.h src/scene/StandardSceneLayout.h \
-  src/scene/SceneLayout.h src/tracking/ObjectTracker.h \
+  src/scene/SceneLayout.h src/sound/SoundOscSender.h \
+  src/sound/OscUdpSender.h src/tracking/ObjectTracker.h \
   src/video_Processing.h src/CameraAuthorization.h src/SourceCrop.h \
   /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/libs/glfw/include/GLFW/glfw3.h
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/SDKSettings.json:
@@ -1243,6 +1244,8 @@ src/scene/StandardSceneBehavior.h:
 src/scene/SceneBehavior.h:
 src/scene/StandardSceneLayout.h:
 src/scene/SceneLayout.h:
+src/sound/SoundOscSender.h:
+src/sound/OscUdpSender.h:
 src/tracking/ObjectTracker.h:
 src/video_Processing.h:
 src/CameraAuthorization.h:

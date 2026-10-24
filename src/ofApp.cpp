@@ -270,6 +270,8 @@ void ofApp::setupGuiParameters() {
   pSceneLayoutId.set("Layout ID", "standard_layout");
   pSceneBehaviorId.set("Behavior ID", "standard_behavior");
   pExportAlpha.set("alpha", false);
+  pSoundOscEnable.set("Sound OSC Out", true);
+  pSoundOscPort.set("Sound OSC Port", 7400, 1024, 65535);
 
   // ★追加: リスナー紐付け
   pGraphicsEnableBase.addListener(this, &ofApp::onGraphicsEnableBaseChanged);
@@ -287,6 +289,8 @@ void ofApp::setupGuiParameters() {
   pMergeEventId.addListener(this, &ofApp::onMergeEventIdChanged);
   pSceneLayoutId.addListener(this, &ofApp::onSceneLayoutIdChanged);
   pSceneBehaviorId.addListener(this, &ofApp::onSceneBehaviorIdChanged);
+  pSoundOscEnable.addListener(this, &ofApp::onSoundOscEnableChanged);
+  pSoundOscPort.addListener(this, &ofApp::onSoundOscPortChanged);
 
   pVideoStatusText.set("Video Status", "VideoモードでOpen Videoまたはドラッグから動画を読み込めます");
 
@@ -298,6 +302,8 @@ void ofApp::setupGuiParameters() {
   // ofParameterのリスナーはこの後で登録するため、ここでは明示的に反映する。
   realtimeMode = pRealtime.get();
   applyTargetFrameRate(pMainWindowTargetFps.get());
+  soundOscSender.setTarget("127.0.0.1", pSoundOscPort.get());
+  soundOscSender.setEnabled(pSoundOscEnable.get());
   videoProcessor.processFps = static_cast<float>(pMainWindowTargetFps.get());
   personSegmenter.aspectRatioPercent = pAspectRatio.get();
   if (pYoloInput320.get()) {
@@ -415,6 +421,8 @@ void ofApp::setupGuiPersistence() {
   guiParams.add(pSceneBehaviorId);
   guiParams.add(pMainWindowTargetFps);
   guiParams.add(pExportAlpha);
+  guiParams.add(pSoundOscEnable);
+  guiParams.add(pSoundOscPort);
 
   // プリセットは見た目・検出設定だけを変更し、現在の入力モード
   // （RealtimeかVideoか）は変更しない。root名はcontrols.jsonと同じにして、
@@ -491,6 +499,7 @@ void ofApp::saveGuiSettings() const {
 //--------------------------------------------------------------
 void ofApp::exit() {
   finishRealtimeDetection(false);
+  soundOscSender.stop();
   saveGuiSettings();
 }
 
@@ -770,6 +779,8 @@ void ofApp::rebuildGuiPanel() {
   gui.add(pGraphicsOffsetRound);
   gui.add<float>(pGraphicsStrokeWeight);
   gui.add(pGraphicsStrokeRound);
+  gui.add(pSoundOscEnable);
+  gui.add(pSoundOscPort);
 
   // 動画モード時のみUIを追加
   if (!realtimeMode) {
@@ -1006,6 +1017,14 @@ void ofApp::onGraphicsOffsetRoundChanged(bool &value) {
 }
 void ofApp::onGraphicsEnableStrokeChanged(bool &value) {
     if (humanGraphicsScene) humanGraphicsScene->enableStroke = value;
+    saveGuiSettings();
+}
+void ofApp::onSoundOscEnableChanged(bool &value) {
+    soundOscSender.setEnabled(value);
+    saveGuiSettings();
+}
+void ofApp::onSoundOscPortChanged(int &value) {
+    soundOscSender.setTarget("127.0.0.1", value);
     saveGuiSettings();
 }
 void ofApp::onGraphicsMergeEnableChanged(bool &value) {
@@ -1880,6 +1899,13 @@ void ofApp::update() {
   if (currentScene) {
     const HumanContourData &activeData = realtimeMode ? humanData : videoProcessor.humanData;
     currentScene->update(activeData);
+  }
+
+  // 人物グラフィックのシーンを表示している間だけ、音へ人物の情報を送る。
+  if (humanGraphicsScene && currentScene == humanGraphicsScene) {
+    const glm::vec2 canvas = humanGraphicsScene->canvasSize();
+    soundOscSender.update(humanGraphicsScene->soundPeople(), canvas.x,
+                          canvas.y, ofGetElapsedTimef());
   }
 }
 

@@ -2,7 +2,9 @@
 #include "ofApp.h"
 
 #include <algorithm>
+#include <cmath>
 #include <functional>
+#include <unordered_map>
 #include <utility>
 
 namespace {
@@ -18,6 +20,7 @@ void HumanGraphicsScene::setup() {
   trackedObjects.clear();
   geometryObjects.clear();
   sceneObjects.clear();
+  soundPeopleList.clear();
   materialAssignmentSystem.reset();
   proximityPairing.reset();
   renderRecipe = std::make_shared<gux::StandardRenderRecipe>();
@@ -53,6 +56,7 @@ void HumanGraphicsScene::update(const HumanContourData& humanData,
         geometryProcessor.process(trackedObjects, geometrySettings());
     sceneObjects =
         sceneComposer.compose(geometryObjects, compositionSettings());
+    updateSoundPeople();
     // ペアで動く・描くモードでは、近いObject同士が隣り合うよう並べ替える。
     if (usesObjectPairs()) proximityPairing.reorder(sceneObjects);
 
@@ -292,4 +296,58 @@ gux::RenderContext HumanGraphicsScene::renderContext() const {
   context.strokeJoinType = strokeJoinType;
   context.backgroundColor = ofColor(ofApp::background_color);
   return context;
+}
+
+// 合体後の形はすべての元IDを持つため、誰と誰が合体したかは形の内外で判定する。
+// 並べ替え・レイアウト前に呼び、合体後の形と元の形が同じ座標系にある状態で比べる。
+void HumanGraphicsScene::updateSoundPeople() {
+  soundPeopleList.clear();
+  soundPeopleList.reserve(trackedObjects.size());
+
+  const bool oneToOne = sceneObjects.size() == geometryObjects.size();
+  std::unordered_map<gux::ObjectId, size_t> shapeOfObject;
+  if (!oneToOne) {
+    for (const auto& object : geometryObjects) {
+      const glm::vec2 center = object.contour.getCentroid2D();
+      int found = -1;
+      for (size_t i = 0; i < sceneObjects.size() && found < 0; ++i) {
+        if (sceneObjects[i].geometry.inside(center.x, center.y)) {
+          found = static_cast<int>(i);
+        }
+      }
+      // 凹んだ形で重心が外に出た場合は、頂点が最も多く入る形を選ぶ。
+      if (found < 0) {
+        size_t bestCount = 0;
+        for (size_t i = 0; i < sceneObjects.size(); ++i) {
+          size_t count = 0;
+          for (const auto& point : object.contour) {
+            if (sceneObjects[i].geometry.inside(point.x, point.y)) ++count;
+          }
+          if (count > bestCount) {
+            bestCount = count;
+            found = static_cast<int>(i);
+          }
+        }
+      }
+      if (found >= 0) shapeOfObject[object.id] = static_cast<size_t>(found);
+    }
+  }
+
+  // グループの値は、そのグループ内で最小の人物IDにする（フレームをまたいで安定する）。
+  std::unordered_map<size_t, gux::ObjectId> groupOfShape;
+  for (const auto& [id, shape] : shapeOfObject) {
+    auto it = groupOfShape.find(shape);
+    if (it == groupOfShape.end() || id < it->second) groupOfShape[shape] = id;
+  }
+
+  for (const auto& tracked : trackedObjects) {
+    gux::SoundPerson person;
+    person.id = tracked.id;
+    person.centroid = tracked.centroid;
+    person.area = std::abs(tracked.contour.getArea());
+    person.group = tracked.id;
+    auto shape = shapeOfObject.find(tracked.id);
+    if (shape != shapeOfObject.end()) person.group = groupOfShape[shape->second];
+    soundPeopleList.push_back(person);
+  }
 }
