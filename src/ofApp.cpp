@@ -236,6 +236,7 @@ void ofApp::setupGuiParameters() {
 
   // ★追加: 左右反転トグル（デフォルトOFF）
   pFlipHorizontal.set("Flip Horizontal", false);
+  pProjectionSafeArea.set("Projection Margin", true);
 
   pYoloConfidence.set("YOLO Confidence",
                       personSegmenter.yoloConfidenceThreshold, 0.0f, 1.0f);
@@ -307,6 +308,9 @@ void ofApp::setupGuiParameters() {
   pCameraIndex.addListener(this, &ofApp::onCameraIndexChanged);
   pRealtime.addListener(this, &ofApp::onRealtimeChanged);
   pFlipHorizontal.addListener(this, &ofApp::onFlipHorizontalChanged);
+  pProjectionSafeArea.addListener(this, &ofApp::onProjectionSafeAreaChanged);
+  // 保存済みの投影余白設定に合わせて、起動時のMain Window比率を決める。
+  applyMainWindowAspectLock();
   pYoloConfidence.addListener(this, &ofApp::onYoloConfidenceChanged);
   pYoloInput320.addListener(this, &ofApp::onYoloInput320Changed);
   pVertexCount.addListener(this, &ofApp::onVertexCountChanged);
@@ -382,6 +386,7 @@ void ofApp::setupGuiPersistence() {
   guiParams.add(pRealtime);
   guiParams.add(pCameraIndex);
   guiParams.add(pFlipHorizontal);
+  guiParams.add(pProjectionSafeArea);
   guiParams.add(pYoloConfidence);
   guiParams.add(pYoloInput320);
   guiParams.add(pVertexCount);
@@ -720,6 +725,7 @@ void ofApp::rebuildGuiPanel() {
   gui.add(pRunTime);
   gui.add(pMainWindowTargetFps);
   gui.add(pMainWindowFps);
+  gui.add(pProjectionSafeArea);
   gui.add(pRealtime);
   if (!realtimeMode) gui.add(&openVideoButton);
   gui.add(pPresetIndex);
@@ -1118,6 +1124,7 @@ void ofApp::onRealtimeChanged(bool &value) {
     // setWindowShape() を通し、Retinaの論理サイズと物理ピクセルの
     // 変換をopenFrameworks側に任せる。
     mainWindow->setWindowShape(W, H);
+    applyMainWindowAspectLock();
   }
   saveGuiSettings();
 }
@@ -1167,8 +1174,9 @@ void ofApp::startImageSequenceExport() {
 
   // Mainの描画座標をここで固定する。Controls側から押されても
   // ofGetWidth()/ofGetHeight() はControlsのサイズを返す可能性がある。
-  exportCanvasWidth = mainWindow->getWidth();
-  exportCanvasHeight = mainWindow->getHeight();
+  // 投影余白がONの場合は、余白を除いた描画範囲だけを書き出す。
+  exportCanvasWidth = mainCanvasWidth();
+  exportCanvasHeight = mainCanvasHeight();
   exportCropPositionX = cropPositionX;
   exportCropPositionY = cropPositionY;
   if (exportCanvasWidth <= 0 || exportCanvasHeight <= 0) {
@@ -1525,6 +1533,11 @@ void ofApp::resizeMainWindowToVideo() {
   if (!mainWindow) return;
 
   if (!mainWindow->getGLFWWindow()) return;
+  // 投影余白がONの間はMain Windowを4Kの比率で保つため、動画サイズへ合わせない。
+  if (pProjectionSafeArea.get()) {
+    applyMainWindowAspectLock();
+    return;
+  }
 
   int w = videoProcessor.getVideoWidth();
   int h = videoProcessor.getVideoHeight();
@@ -1548,6 +1561,13 @@ void ofApp::resizeMainWindowToVideo() {
 void ofApp::applyMainWindowAspectLock() {
   if (!mainWindow || !mainWindow->getGLFWWindow()) return;
   GLFWwindow *handle = mainWindow->getGLFWWindow();
+
+  // 投影余白がONの間は、4K(16:9)の比率に固定して余白の位置を保つ。
+  if (pProjectionSafeArea.get()) {
+    glfwSetWindowAspectRatio(handle, kProjectionFrameWidth,
+                             kProjectionFrameHeight);
+    return;
+  }
 
   const int w = videoProcessor.getVideoWidth();
   const int h = videoProcessor.getVideoHeight();
@@ -1821,8 +1841,8 @@ void ofApp::update() {
             frameHeight, frameWidth, CV_8UC3,
             colorImg.getPixels().getData()).clone();
 
-        const int outW = mainWindow ? mainWindow->getWidth() : ofGetWidth();
-        const int outH = mainWindow ? mainWindow->getHeight() : ofGetHeight();
+        const int outW = mainCanvasWidth();
+        const int outH = mainCanvasHeight();
         const cv::Rect crop = sourceCrop(frameWidth, frameHeight, outW, outH,
                                           cropPositionX, cropPositionY);
         if (crop.empty()) return;
@@ -1842,11 +1862,23 @@ void ofApp::update() {
     // (処理の実体はVideoProcessingクラスに分離している)
     // ============================================
     if (mainWindow) {
-      videoProcessor.setOutputView(mainWindow->getWidth(),
-                                   mainWindow->getHeight(),
+      videoProcessor.setOutputView(mainCanvasWidth(),
+                                   mainCanvasHeight(),
                                    cropPositionX, cropPositionY);
     }
     videoProcessor.update();
+  }
+
+  // Sceneのレイアウトを描画範囲（投影余白を除いた範囲）に合わせる。
+  // setCanvasSize()はレイアウトを作り直すため、サイズが変わった時だけ呼ぶ。
+  if (humanGraphicsScene) {
+    const int canvasW = mainCanvasWidth();
+    const int canvasH = mainCanvasHeight();
+    if (canvasW != lastSceneCanvasWidth || canvasH != lastSceneCanvasHeight) {
+      humanGraphicsScene->setCanvasSize(canvasW, canvasH);
+      lastSceneCanvasWidth = canvasW;
+      lastSceneCanvasHeight = canvasH;
+    }
   }
 
   // 現在のアクティブなシーンへ座標データを渡す
@@ -1865,6 +1897,11 @@ void ofApp::draw() {
 
   // 現在のシーンのグラフィックを描画
   // (Realtimeでもオフラインでも、Scene側は同じ描画ロジックのまま)
+  // 投影余白がONの場合は、中央の描画範囲へ原点を移して描く。
+  const ofRectangle canvasRect = mainCanvasRect();
+  ofPushMatrix();
+  ofTranslate(canvasRect.x, canvasRect.y);
+
   if (currentScene) {
     currentScene->draw();
   }
@@ -1873,13 +1910,74 @@ void ofApp::draw() {
   if (showDebug) {
     drawDebug();
   }
+  ofPopMatrix();
+
+  // 描画範囲からはみ出した分も含めて、外側を白で塗りつぶす。
+  drawProjectionMargins();
+}
+
+//--------------------------------------------------------------
+ofRectangle ofApp::mainCanvasRect() const {
+  const float windowW = static_cast<float>(
+      mainWindow ? mainWindow->getWidth() : ofGetWidth());
+  const float windowH = static_cast<float>(
+      mainWindow ? mainWindow->getHeight() : ofGetHeight());
+  if (!pProjectionSafeArea.get() || windowW <= 0.0f || windowH <= 0.0f) {
+    return ofRectangle(0.0f, 0.0f, windowW, windowH);
+  }
+  // 4K画面に対する投影範囲の割合を、現在のウィンドウサイズに当てはめる。
+  // (4Kフルスクリーンでは、ちょうど中央の3840x960になる)
+  const float w = std::round(windowW * kProjectionSafeWidth /
+                             static_cast<float>(kProjectionFrameWidth));
+  const float h = std::round(windowH * kProjectionSafeHeight /
+                             static_cast<float>(kProjectionFrameHeight));
+  return ofRectangle(std::round((windowW - w) * 0.5f),
+                     std::round((windowH - h) * 0.5f), w, h);
+}
+
+int ofApp::mainCanvasWidth() const {
+  return static_cast<int>(mainCanvasRect().width);
+}
+
+int ofApp::mainCanvasHeight() const {
+  return static_cast<int>(mainCanvasRect().height);
+}
+
+//--------------------------------------------------------------
+void ofApp::drawProjectionMargins() {
+  if (!pProjectionSafeArea.get()) return;
+  const float windowW = static_cast<float>(
+      mainWindow ? mainWindow->getWidth() : ofGetWidth());
+  const float windowH = static_cast<float>(
+      mainWindow ? mainWindow->getHeight() : ofGetHeight());
+  const ofRectangle r = mainCanvasRect();
+
+  ofPushStyle();
+  ofFill();
+  ofSetColor(255);
+  ofDrawRectangle(0.0f, 0.0f, windowW, r.y);                      // 上
+  ofDrawRectangle(0.0f, r.getBottom(), windowW, windowH - r.getBottom()); // 下
+  ofDrawRectangle(0.0f, r.y, r.x, r.height);                      // 左
+  ofDrawRectangle(r.getRight(), r.y, windowW - r.getRight(), r.height);  // 右
+  ofPopStyle();
+}
+
+//--------------------------------------------------------------
+void ofApp::onProjectionSafeAreaChanged(bool &value) {
+  applyMainWindowAspectLock();
+  // 描画範囲が変わるので、推論結果もすぐ作り直す。
+  if (realtimeMode) {
+    finishRealtimeDetection(false);
+    lastRealtimeProcessMs = 0;
+  }
+  saveGuiSettings();
 }
 
 //--------------------------------------------------------------
 void ofApp::drawDebug() {
   ofPushStyle();
-  const int canvasWidth = mainWindow ? mainWindow->getWidth() : ofGetWidth();
-  const int canvasHeight = mainWindow ? mainWindow->getHeight() : ofGetHeight();
+  const int canvasWidth = mainCanvasWidth();
+  const int canvasHeight = mainCanvasHeight();
   cv::Rect visibleCrop;
   const ofTexture *sourceTexture = nullptr;
   int sourceWidth = 0;
@@ -2024,8 +2122,8 @@ void ofApp::keyPressed(int key) {
                                          : videoProcessor.getVideoWidth();
     const int sourceHeight = realtimeMode ? colorImg.getHeight()
                                           : videoProcessor.getVideoHeight();
-    const int canvasWidth = mainWindow ? mainWindow->getWidth() : 0;
-    const int canvasHeight = mainWindow ? mainWindow->getHeight() : 0;
+    const int canvasWidth = mainWindow ? mainCanvasWidth() : 0;
+    const int canvasHeight = mainWindow ? mainCanvasHeight() : 0;
     const cv::Rect crop = sourceCrop(sourceWidth, sourceHeight,
                                       canvasWidth, canvasHeight,
                                       cropPositionX, cropPositionY);

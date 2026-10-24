@@ -125,6 +125,25 @@ public:
   ofParameter<bool> pFlipHorizontal; // true: 左右反転（鏡像）表示にする
 
   // ============================================
+  // プロジェクター投影用の余白
+  // 4K(3840x2160)のうち中央3840x960だけが投影されるため、
+  // ONの間はその範囲だけに描画し、外側を白で塗る。
+  // ============================================
+  ofParameter<bool> pProjectionSafeArea;
+  void onProjectionSafeAreaChanged(bool &value);
+  // Main Window内で実際に描画する範囲（余白OFFならウィンドウ全体）
+  ofRectangle mainCanvasRect() const;
+  int mainCanvasWidth() const;
+  int mainCanvasHeight() const;
+  void drawProjectionMargins();
+  static constexpr int kProjectionFrameWidth = 3840;
+  static constexpr int kProjectionFrameHeight = 2160;
+  static constexpr int kProjectionSafeWidth = 3840;
+  static constexpr int kProjectionSafeHeight = 960;
+  int lastSceneCanvasWidth = 0;
+  int lastSceneCanvasHeight = 0;
+
+  // ============================================
   // 人物輪郭の座標データ（ここで計算し全シーンへ渡す）
   // Realtime=trueのときはこちらをScene側へ渡す
   // ============================================
