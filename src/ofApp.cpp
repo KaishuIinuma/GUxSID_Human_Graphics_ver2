@@ -1556,8 +1556,8 @@ void ofApp::resizeMainWindowToVideo() {
 }
 
 //--------------------------------------------------------------
-// Videoモードで素材を読み込んでいる間は、Main Windowの縦横比を素材の比率に
-// 固定する。サイズはユーザーが自由に変えられる。それ以外は制約を外す。
+// 投影余白がONの間はMain Windowを4K(16:9)の比率に固定し、
+// OFFの間は比率の制約を外して自由にリサイズできるようにする。
 void ofApp::applyMainWindowAspectLock() {
   if (!mainWindow || !mainWindow->getGLFWWindow()) return;
   GLFWwindow *handle = mainWindow->getGLFWWindow();
@@ -1569,14 +1569,8 @@ void ofApp::applyMainWindowAspectLock() {
     return;
   }
 
-  const int w = videoProcessor.getVideoWidth();
-  const int h = videoProcessor.getVideoHeight();
-  if (realtimeMode || !videoProcessor.isLoaded() || w <= 0 || h <= 0) {
-    glfwSetWindowAspectRatio(handle, GLFW_DONT_CARE, GLFW_DONT_CARE);
-    return;
-  }
-  const int divisor = std::gcd(w, h);
-  glfwSetWindowAspectRatio(handle, w / divisor, h / divisor);
+  // 投影余白がOFFの間は、比率を固定せず自由にリサイズできるようにする。
+  glfwSetWindowAspectRatio(handle, GLFW_DONT_CARE, GLFW_DONT_CARE);
 }
 
 //--------------------------------------------------------------
