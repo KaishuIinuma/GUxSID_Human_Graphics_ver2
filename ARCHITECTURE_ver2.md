@@ -68,14 +68,31 @@ then overlays a solid Stroke using the current background color. Presets select
 the active Recipe through `Recipe_ID`.
 
 `floating_bridge.json` uses `floating_bridge_render` with the static
-`standard_behavior`. `ProximityPairing` pairs nearby objects (with a small bias
-toward keeping the previous pairs) and orders them so each pair is adjacent;
-merging is disabled while this Recipe is active. Each bridge is drawn behind
-the object fills and uses the two contour vertices that are farthest apart on
-the axis perpendicular to the line between the paired object centers. Both
-objects of a pair are split by that perpendicular through their own center:
-the outer half takes the left object's color and the inner half the right
-object's color.
+`standard_behavior`. Objects are drawn like `standard_render`, following the
+normal Base / Stroke / Offset / Merge toggles. Behind them, one open stroke
+connects the centers of all objects on screen, ordered left to right by X
+(bottom first when X is equal), so the line never moves back to the left.
+
+## Paper shadow
+
+The graphics are treated as sheets of colored paper lifted slightly off the
+background. `render/PaperShadowPass` runs before every Recipe: it draws the
+same Recipe once into a half-resolution FBO, blurs its alpha, and lays two
+shadows under the paper. A tight contact shadow gives the sheet an edge, and a
+wide soft ambient shadow gives it height. Lengths scale with canvas height, so
+preview and export match. Shadow alpha is composited separately so transparent
+export keeps it. GUI: `Paper Shadow`, `Paper Shadow Lift`, `Paper Shadow Angle`
+(0 = right, 90 = down), `Paper Shadow Opacity`.
+
+## Background gradient
+
+`render/BackgroundGradientPass` keeps the background from being a flat fill.
+Over the background color it draws four soft, blurred ellipses of off-white
+(about 230–240 on a 255 background) that drift slowly, like a mesh gradient.
+Overlaps are combined so they never get much darker than one ellipse, and
+sub-step noise prevents banding. Drift uses the Scene's elapsed time, so video
+export reproduces it; transparent export leaves the background out. GUI:
+`Background Gradient`, `Background Gradient Depth`, `Background Gradient Speed`.
 
 ver2 stores its GUI settings and crash marker under
 `Application Support/GUxSID_Human_Graphics_ver2`, independently from the
@@ -84,7 +101,7 @@ original project.
 ## Sound OSC output
 
 `sound/SoundOscSender` sends per-person data over OSC (UDP, `127.0.0.1`,
-port `Sound OSC Port`, default 7400) so an external sound engine (TouchDesigner)
+port 7400, fixed by `ofApp::kSoundOscPort`) so an external sound engine (TouchDesigner)
 can react. It is header-only and needs no addon. Positions and size are
 normalized to 0–1 of the canvas; speed is canvas units per second.
 
@@ -98,6 +115,18 @@ normalized to 0–1 of the canvas; speed is canvas units per second.
 | `/gux/merge` | idA idB x y | two people stay in one merged shape for 0.15 s |
 | `/gux/split` | idA idB x y | a merged pair stays apart for 0.15 s |
 | `/gux/clear` | — | sending starts or stops |
+| `/gux/note/0`…`/gux/note/7` | active level motion x y id | every frame, all 8 notes (ド〜ド, C4–C5) |
+| `/gux/noteon` | note midi id | a note is assigned to a person |
+| `/gux/noteoff` | note midi id | that person left |
+
+Each person gets the lowest free note of the C major scale (ド レ ミ ファ ソ ラ
+シ ド) when they appear. `motion` is the fastest contour vertex, in canvas
+heights per second: every vertex is matched to the nearest vertex of the
+previous contour (vertex order can shift between detections) and the largest
+distance is divided by the time between detections. `level` maps motion
+between `motionFloor` (0.15) and `motionFull` (1.5) to 0–1, rising in 0.05 s and
+falling in 0.6 s. After the person leaves, `active` becomes 0 and the note is
+freed once `level` has fallen to 0.
 
 Each person keeps one slot while visible, so CHOP channels never appear or
 disappear. A freed slot keeps its last position with `active` 0, and the

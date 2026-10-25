@@ -5,10 +5,11 @@
 #include "event/StandardMergeEvent.h"
 #include "geometry/GeometryProcessor.h"
 #include "material/MaterialAssignmentSystem.h"
+#include "render/BackgroundGradientPass.h"
 #include "render/MixRenderRecipe.h"
+#include "render/PaperShadowPass.h"
 #include "render/FloatingBridgeRenderRecipe.h"
 #include "render/StandardRenderRecipe.h"
-#include "scene/ProximityPairing.h"
 #include "scene/SceneComposer.h"
 #include "scene/StandardSceneBehavior.h"
 #include "scene/StandardSceneLayout.h"
@@ -57,13 +58,14 @@ class HumanGraphicsScene : public BaseScene {
   StrokeJoinType strokeJoinType = StrokeJoinType::Round;
   gux::MaterialType baseMaterialType = gux::MaterialType::Solid;
   gux::MaterialType outlineMaterialType = gux::MaterialType::Solid;
+  gux::PaperShadowSettings paperShadow;
+  gux::BackgroundGradientSettings backgroundGradient;
 
  private:
   gux::ObjectTracker objectTracker;
   gux::GeometryProcessor geometryProcessor;
   gux::SceneComposer sceneComposer;
   gux::MaterialAssignmentSystem materialAssignmentSystem;
-  gux::ProximityPairing proximityPairing;
   std::vector<size_t> lockedPaletteIndices;
   // 動画書き出しではHumanGraphicsScene全体をコピーするため、Recipeは共有所有にする。
   // Recipe自体は状態を持たず、通常描画と書き出し描画で安全に共有できる。
@@ -71,6 +73,9 @@ class HumanGraphicsScene : public BaseScene {
   std::shared_ptr<gux::MergeEvent> mergeEvent;
   std::shared_ptr<gux::SceneLayout> sceneLayout;
   std::shared_ptr<gux::SceneBehavior> sceneBehavior;
+  gux::PaperShadowPass paperShadowPass;
+  gux::BackgroundGradientPass backgroundGradientPass;
+  float backgroundSeconds = 0.0f;  // 背景のにじみが漂う時間（書き出しでは動画の時間）
 
   std::vector<gux::TrackedObject> trackedObjects;
   std::vector<gux::GeometryObject> geometryObjects;
@@ -85,7 +90,6 @@ class HumanGraphicsScene : public BaseScene {
   int canvasWidth = 0;
   int canvasHeight = 0;
 
-  bool usesObjectPairs() const;
   int activeCanvasWidth() const;
   int activeCanvasHeight() const;
   uint64_t detectionSignature(const HumanContourData& humanData) const;

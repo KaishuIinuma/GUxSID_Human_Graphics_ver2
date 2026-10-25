@@ -224,13 +224,23 @@ public:
   ofParameter<string> pMergeEventId;
   ofParameter<string> pSceneLayoutId;
   ofParameter<string> pSceneBehaviorId;
+  // 色紙の影。紙が背景からわずかに浮いて見えるようにする。
+  ofParameter<bool> pPaperShadowEnable;
+  ofParameter<float> pPaperShadowLift;    // 浮き量（影のずれ・ぼかし）
+  ofParameter<float> pPaperShadowAngle;   // 影の向き（0 = 右, 90 = 真下）
+  ofParameter<float> pPaperShadowOpacity; // 影の濃さの倍率
+  // 背景のグラデーション。白の上にオフホワイトのにじみを漂わせる。
+  ofParameter<bool> pBackgroundGradientEnable;
+  ofParameter<float> pBackgroundGradientDepth; // にじみの濃さ
+  ofParameter<float> pBackgroundGradientSpeed; // 漂う速さ
 
   // 音のソフト（TouchDesignerなど）へ人物の情報をOSCで送る。送信先は同じMacの127.0.0.1。
   ofParameter<bool> pSoundOscEnable;
-  ofParameter<int> pSoundOscPort;
+  // 送信先ポートは誤操作で変わらないよう固定する。変える場合はこの値を書き換える。
+  static constexpr int kSoundOscPort = 7400;
+  ofParameter<string> pSoundOscTarget;  // 表示専用（Controlsで変更できない）
   gux::SoundOscSender soundOscSender;
   void onSoundOscEnableChanged(bool &value);
-  void onSoundOscPortChanged(int &value);
 
   // GUIリスナー関数
   void onGraphicsEnableBaseChanged(bool &value);
@@ -241,6 +251,9 @@ public:
   void onGraphicsOffsetScaleChanged(float &value);
   void onGraphicsOffsetRoundChanged(bool &value);
   void onGraphicsStrokeWeightChanged(float &value);
+  void onLookEnableChanged(bool &value);
+  void onLookValueChanged(float &value);
+  void applyLookSettings();
   void onGraphicsStrokeRoundChanged(bool &value);
   void onGraphicsBaseMaterialChanged(int &value);
   void onGraphicsStrokeMaterialChanged(int &value);

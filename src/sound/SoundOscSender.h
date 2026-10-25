@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <array>
 #include <map>
 #include <set>
@@ -21,6 +22,8 @@ struct SoundPerson {
   float area = 0.0f;
   // 同じ合体グループの人は同じ値になる。グループ内で最小のIDを使う。
   ObjectId group = 0;
+  // 画面に描かれる輪郭の頂点。動きの量（最大移動量）を測るのに使う。
+  std::vector<glm::vec2> vertices;
 };
 
 // 人物の情報をOSCで音のソフト（TouchDesignerなど）へ送る。
@@ -38,6 +41,15 @@ struct SoundPerson {
 //   /gux/merge  idA idB x y          2人がくっついた（x yは2人の中間）
 //   /gux/split  idA idB x y          くっついていた2人が離れた
 //   /gux/clear                       送信開始時・停止時（音を全部消す合図）
+//
+// ドレミ（ハ長調の8音）を人に割り当てる。現れた順に、空いている一番低い音を使う。
+//   /gux/note/0〜7  active level motion x y id   毎フレーム8音すべて
+//     0=ド(C4) 1=レ 2=ミ 3=ファ 4=ソ 5=ラ 6=シ 7=ド(C5)
+//     level : 動きから決めた音量 0〜1（速く立ち上がり、ゆっくり下がる）
+//     motion: 輪郭の頂点のうち、一番大きく動いた頂点の速さ（画面の高さ/秒）
+//     いなくなると active=0 になり、level が0まで下がってから音が空く。
+//   /gux/noteon  note midi id        音が人に割り当てられた
+//   /gux/noteoff note midi id        その人がいなくなった
 class SoundOscSender {
  public:
   // 人が一瞬検出から外れても、この時間内に戻れば退場扱いにしない。
@@ -48,6 +60,18 @@ class SoundOscSender {
   float speedSmoothingSeconds = 0.25f;
 
   static constexpr int SlotCount = 16;
+  static constexpr int NoteCount = 8;
+  static constexpr std::array<int, NoteCount> NoteMidi = {60, 62, 64, 65, 67, 69, 71, 72};
+
+  // 動きの量を音量へ変える範囲（画面の高さ/秒）。
+  // motionFloor 以下は0（輪郭の細かい揺れを無視）、motionFull 以上で最大。
+  float motionFloor = 0.15f;
+  float motionFull = 1.5f;
+  // 音量の立ち上がり・下がりの時定数（秒）。
+  float levelAttackSeconds = 0.05f;
+  float levelReleaseSeconds = 0.6f;
+  // この時間輪郭が更新されなければ、動いていないとみなす。
+  float motionStaleSeconds = 0.3f;
 
   void setEnabled(bool value) {
     if (enabled == value) return;
@@ -101,7 +125,14 @@ class SoundOscSender {
         state.position = position;
         state.lastMoveSeconds = nowSeconds;
         state.slot = takeFreeSlot();
+        state.note = takeFreeNote(person.id);
         found = states.emplace(person.id, state).first;
+        if (state.note >= 0) {
+          sender.send(OscMessage("/gux/noteon")
+                          .add(state.note)
+                          .add(NoteMidi[state.note])
+                          .add(toInt(person.id)));
+        }
         sender.send(OscMessage("/gux/enter")
                         .add(toInt(person.id))
                         .add(state.slot)
@@ -112,6 +143,7 @@ class SoundOscSender {
 
       PersonState& state = found->second;
       updateSpeed(state, position, nowSeconds);
+      updateMotion(state, person.vertices, canvasHeight, nowSeconds);
       state.position = position;
       state.size = size;
       state.group = person.group;
@@ -133,6 +165,15 @@ class SoundOscSender {
         const int slot = it->second.slot;
         sender.send(OscMessage("/gux/exit").add(toInt(it->first)).add(slot));
         if (slot >= 0) slots[slot].active = false;
+        const int note = it->second.note;
+        if (note >= 0) {
+          notes[note].active = false;
+          notes[note].motion = 0.0f;
+          sender.send(OscMessage("/gux/noteoff")
+                          .add(note)
+                          .add(NoteMidi[note])
+                          .add(toInt(it->first)));
+        }
         it = states.erase(it);
       } else {
         ++it;
@@ -149,6 +190,9 @@ class SoundOscSender {
       slot.group = state.group;
     }
     sendSlots();
+
+    updateNotes(nowSeconds);
+    sendNotes();
 
     updatePairs(people, nowSeconds);
 
@@ -167,6 +211,19 @@ class SoundOscSender {
     float lastMoveSeconds = 0.0f;
     float lastUpdateSeconds = -1.0f;
     int slot = -1;  // 空きがなければ-1（スロットには出ない）
+    int note = -1;  // 8音が埋まっていれば-1（音は鳴らない）
+    std::vector<glm::vec2> previousVertices;
+    float lastShapeSeconds = -1.0f;
+    float motion = 0.0f;  // 最大移動量の速さ（画面の高さ/秒）
+  };
+
+  struct NoteState {
+    bool used = false;    // 人に割り当て中、または音量が下がりきっていない
+    bool active = false;  // 割り当てた人が画面にいる
+    ObjectId id = 0;
+    float level = 0.0f;
+    float motion = 0.0f;
+    glm::vec2 position{0.5f, 0.5f};
   };
 
   struct SlotState {
@@ -192,6 +249,8 @@ class SoundOscSender {
   std::map<ObjectId, PersonState> states;
   std::map<Pair, PairState> pairs;
   std::array<SlotState, SlotCount> slots{};
+  std::array<NoteState, NoteCount> notes{};
+  float lastNoteUpdateSeconds = -1.0f;
 
   static int toInt(ObjectId id) {
     return static_cast<int>(id & 0x7fffffff);
@@ -201,6 +260,8 @@ class SoundOscSender {
     states.clear();
     pairs.clear();
     slots = {};
+    notes = {};
+    lastNoteUpdateSeconds = -1.0f;
   }
 
   void sendClear() {
@@ -208,6 +269,104 @@ class SoundOscSender {
     sender.send(OscMessage("/gux/clear"));
     for (auto& slot : slots) slot.active = false;
     sendSlots();
+    for (auto& note : notes) note = NoteState{};
+    sendNotes();
+  }
+
+  // 空いている一番低い音を使う（音量が下がりきっていない音は使わない）。
+  int takeFreeNote(ObjectId id) {
+    for (int i = 0; i < NoteCount; ++i) {
+      if (notes[i].used) continue;
+      notes[i] = NoteState{};
+      notes[i].used = true;
+      notes[i].active = true;
+      notes[i].id = id;
+      return i;
+    }
+    return -1;
+  }
+
+  // 各頂点について、前の輪郭で一番近い頂点までの距離を求め、その最大値を
+  // 「最大移動量」とする。頂点の並び順はフレームごとにずれることがあるため、
+  // 同じ番号の頂点どうしではなく、一番近い頂点どうしで比べる。
+  static float maxVertexDisplacement(const std::vector<glm::vec2>& current,
+                                     const std::vector<glm::vec2>& previous) {
+    float maxDistance2 = 0.0f;
+    for (const auto& p : current) {
+      float nearest2 = std::numeric_limits<float>::max();
+      for (const auto& q : previous) {
+        const glm::vec2 d = p - q;
+        nearest2 = std::min(nearest2, d.x * d.x + d.y * d.y);
+      }
+      maxDistance2 = std::max(maxDistance2, nearest2);
+    }
+    return std::sqrt(maxDistance2);
+  }
+
+  // 輪郭は検出のたびにしか変わらないので、変わったときだけ速さを測る。
+  void updateMotion(PersonState& state, const std::vector<glm::vec2>& vertices,
+                    float canvasHeight, float nowSeconds) {
+    if (vertices.empty()) return;
+    if (vertices == state.previousVertices) {
+      if (state.lastShapeSeconds >= 0.0f &&
+          nowSeconds - state.lastShapeSeconds > motionStaleSeconds) {
+        state.motion = 0.0f;
+      }
+      return;
+    }
+    if (!state.previousVertices.empty() && state.lastShapeSeconds >= 0.0f) {
+      const float dt = nowSeconds - state.lastShapeSeconds;
+      if (dt > 1e-3f && dt <= motionStaleSeconds) {
+        const float distance =
+            maxVertexDisplacement(vertices, state.previousVertices) / canvasHeight;
+        state.motion = distance / dt;
+      } else {
+        state.motion = 0.0f;
+      }
+    }
+    state.previousVertices = vertices;
+    state.lastShapeSeconds = nowSeconds;
+  }
+
+  void updateNotes(float nowSeconds) {
+    const float dt = lastNoteUpdateSeconds < 0.0f
+        ? 0.0f
+        : std::clamp(nowSeconds - lastNoteUpdateSeconds, 0.0f, 0.5f);
+    lastNoteUpdateSeconds = nowSeconds;
+
+    for (const auto& [id, state] : states) {
+      if (state.note < 0) continue;
+      NoteState& note = notes[state.note];
+      note.motion = state.motion;
+      note.position = state.position;
+    }
+
+    const float range = std::max(1e-3f, motionFull - motionFloor);
+    for (auto& note : notes) {
+      if (!note.used) continue;
+      const float target = note.active
+          ? std::clamp((note.motion - motionFloor) / range, 0.0f, 1.0f)
+          : 0.0f;
+      const float tau = target > note.level ? levelAttackSeconds : levelReleaseSeconds;
+      note.level += (target - note.level) * (1.0f - std::exp(-dt / std::max(tau, 1e-3f)));
+      // いなくなった人の音は、音量が下がりきってから空ける。
+      if (!note.active && note.level < 0.005f) {
+        note = NoteState{};
+      }
+    }
+  }
+
+  void sendNotes() {
+    for (int i = 0; i < NoteCount; ++i) {
+      const NoteState& note = notes[i];
+      sender.send(OscMessage("/gux/note/" + std::to_string(i))
+                      .add(note.active ? 1 : 0)
+                      .add(note.level)
+                      .add(note.motion)
+                      .add(note.position.x)
+                      .add(note.position.y)
+                      .add(toInt(note.id)));
+    }
   }
 
   // 退場した人のスロットはすぐ再利用せず、長く空いている順に使う。

@@ -22,7 +22,6 @@ void HumanGraphicsScene::setup() {
   sceneObjects.clear();
   soundPeopleList.clear();
   materialAssignmentSystem.reset();
-  proximityPairing.reset();
   renderRecipe = std::make_shared<gux::StandardRenderRecipe>();
   mergeEvent = std::make_shared<gux::StandardMergeEvent>();
   sceneLayout = std::make_shared<gux::StandardSceneLayout>();
@@ -38,6 +37,7 @@ void HumanGraphicsScene::update(const HumanContourData& humanData) {
 
 void HumanGraphicsScene::update(const HumanContourData& humanData,
                                 float elapsedSeconds, float deltaSeconds) {
+  backgroundSeconds = elapsedSeconds;
   // Detectionはsegmentation実行時だけ更新されるため、同じ観測を毎描画フレーム
   // Trackerへ重複投入しない。
   const uint64_t currentDetectionSignature = detectionSignature(humanData);
@@ -57,8 +57,6 @@ void HumanGraphicsScene::update(const HumanContourData& humanData,
     sceneObjects =
         sceneComposer.compose(geometryObjects, compositionSettings());
     updateSoundPeople();
-    // ペアで動く・描くモードでは、近いObject同士が隣り合うよう並べ替える。
-    if (usesObjectPairs()) proximityPairing.reorder(sceneObjects);
 
     const bool isMerged = sceneObjects.size() < geometryObjects.size();
     mergeJustStarted = isMerged && !mergeActive;
@@ -105,8 +103,19 @@ void HumanGraphicsScene::draw() {
 }
 
 void HumanGraphicsScene::draw(bool drawBackground) {
-  if (drawBackground) ofBackground(ofApp::background_color);
-  if (renderRecipe) renderRecipe->draw(sceneObjects, renderContext());
+  if (drawBackground) {
+    ofBackground(ofApp::background_color);
+    backgroundGradientPass.draw(activeCanvasWidth(), activeCanvasHeight(),
+                                backgroundSeconds, ofColor(ofApp::background_color),
+                                backgroundGradient);
+  }
+  if (!renderRecipe) return;
+  const gux::RenderContext context = renderContext();
+  // 紙の影は、紙と同じ Recipe で形を描いてから作る。どの Recipe でも同じように効く。
+  const auto drawPaper = [&] { renderRecipe->draw(sceneObjects, context); };
+  paperShadowPass.draw(activeCanvasWidth(), activeCanvasHeight(), paperShadow,
+                       drawPaper);
+  drawPaper();
 }
 
 void HumanGraphicsScene::setCanvasSize(int width, int height) {
@@ -122,10 +131,6 @@ void HumanGraphicsScene::setLockedPaletteIndices(
   materialAssignmentSystem.reset();
 }
 
-bool HumanGraphicsScene::usesObjectPairs() const {
-  return renderRecipeId() == gux::FloatingBridgeRenderRecipe::RecipeId;
-}
-
 int HumanGraphicsScene::activeCanvasWidth() const {
   return canvasWidth > 0 ? canvasWidth : ofGetWidth();
 }
@@ -135,7 +140,7 @@ int HumanGraphicsScene::activeCanvasHeight() const {
 }
 
 void HumanGraphicsScene::setRenderRecipe(const std::string& recipeId) {
-  // ペア並べ替えの要否がRecipeで変わるため、Compositionからやり直す。
+  // Recipeの切り替え後は、Compositionからやり直す。
   hasPipelineSignature = false;
   if (recipeId == gux::MixRenderRecipe::RecipeId) {
     renderRecipe = std::make_shared<gux::MixRenderRecipe>();
@@ -261,11 +266,10 @@ gux::GeometrySettings HumanGraphicsScene::geometrySettings() const {
 
 gux::CompositionSettings HumanGraphicsScene::compositionSettings() const {
   gux::CompositionSettings settings;
-  // 再配置とペア接続では並び順・個体数を保つ必要があるため、事前結合しない。
+  // 再配置では並び順・個体数を保つ必要があるため、事前結合しない。
   settings.enableMerge = enableMerge &&
       sceneLayoutId() == gux::StandardSceneLayout::LayoutId &&
-      sceneBehaviorId() == gux::StandardSceneBehavior::BehaviorId &&
-      !usesObjectPairs();
+      sceneBehaviorId() == gux::StandardSceneBehavior::BehaviorId;
   settings.enableBase = enableBase;
   settings.enableOffset = enableOffset;
   settings.enableStroke = enableStroke;
@@ -340,6 +344,10 @@ void HumanGraphicsScene::updateSoundPeople() {
     if (it == groupOfShape.end() || id < it->second) groupOfShape[shape] = id;
   }
 
+  // 動きの量は、画面に描かれる輪郭（頂点数を揃えた後）の頂点から測る。
+  std::unordered_map<gux::ObjectId, const ofPolyline*> contourOfObject;
+  for (const auto& object : geometryObjects) contourOfObject[object.id] = &object.contour;
+
   for (const auto& tracked : trackedObjects) {
     gux::SoundPerson person;
     person.id = tracked.id;
@@ -348,6 +356,11 @@ void HumanGraphicsScene::updateSoundPeople() {
     person.group = tracked.id;
     auto shape = shapeOfObject.find(tracked.id);
     if (shape != shapeOfObject.end()) person.group = groupOfShape[shape->second];
+    auto contour = contourOfObject.find(tracked.id);
+    const ofPolyline& source =
+        contour != contourOfObject.end() ? *contour->second : tracked.contour;
+    person.vertices.reserve(source.size());
+    for (const auto& point : source) person.vertices.emplace_back(point.x, point.y);
     soundPeopleList.push_back(person);
   }
 }

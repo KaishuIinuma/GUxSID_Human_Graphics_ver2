@@ -269,9 +269,17 @@ void ofApp::setupGuiParameters() {
   pMergeEventId.set("Event ID", "standard_event");
   pSceneLayoutId.set("Layout ID", "standard_layout");
   pSceneBehaviorId.set("Behavior ID", "standard_behavior");
+  pPaperShadowEnable.set("Paper Shadow", true);
+  pPaperShadowLift.set("Paper Shadow Lift", 1.0f, 0.0f, 4.0f);
+  pPaperShadowAngle.set("Paper Shadow Angle", 60.0f, 0.0f, 360.0f);
+  pPaperShadowOpacity.set("Paper Shadow Opacity", 1.0f, 0.0f, 3.0f);
+  pBackgroundGradientEnable.set("Background Gradient", true);
+  pBackgroundGradientDepth.set("Background Gradient Depth", 0.08f, 0.0f, 0.3f);
+  pBackgroundGradientSpeed.set("Background Gradient Speed", 1.0f, 0.0f, 4.0f);
   pExportAlpha.set("alpha", false);
   pSoundOscEnable.set("Sound OSC Out", true);
-  pSoundOscPort.set("Sound OSC Port", 7400, 1024, 65535);
+  pSoundOscTarget.set("Sound OSC Target",
+                      "127.0.0.1:" + ofToString(kSoundOscPort));
 
   // ★追加: リスナー紐付け
   pGraphicsEnableBase.addListener(this, &ofApp::onGraphicsEnableBaseChanged);
@@ -289,8 +297,14 @@ void ofApp::setupGuiParameters() {
   pMergeEventId.addListener(this, &ofApp::onMergeEventIdChanged);
   pSceneLayoutId.addListener(this, &ofApp::onSceneLayoutIdChanged);
   pSceneBehaviorId.addListener(this, &ofApp::onSceneBehaviorIdChanged);
+  pPaperShadowEnable.addListener(this, &ofApp::onLookEnableChanged);
+  pPaperShadowLift.addListener(this, &ofApp::onLookValueChanged);
+  pPaperShadowAngle.addListener(this, &ofApp::onLookValueChanged);
+  pPaperShadowOpacity.addListener(this, &ofApp::onLookValueChanged);
+  pBackgroundGradientEnable.addListener(this, &ofApp::onLookEnableChanged);
+  pBackgroundGradientDepth.addListener(this, &ofApp::onLookValueChanged);
+  pBackgroundGradientSpeed.addListener(this, &ofApp::onLookValueChanged);
   pSoundOscEnable.addListener(this, &ofApp::onSoundOscEnableChanged);
-  pSoundOscPort.addListener(this, &ofApp::onSoundOscPortChanged);
 
   pVideoStatusText.set("Video Status", "VideoモードでOpen Videoまたはドラッグから動画を読み込めます");
 
@@ -302,7 +316,7 @@ void ofApp::setupGuiParameters() {
   // ofParameterのリスナーはこの後で登録するため、ここでは明示的に反映する。
   realtimeMode = pRealtime.get();
   applyTargetFrameRate(pMainWindowTargetFps.get());
-  soundOscSender.setTarget("127.0.0.1", pSoundOscPort.get());
+  soundOscSender.setTarget("127.0.0.1", kSoundOscPort);
   soundOscSender.setEnabled(pSoundOscEnable.get());
   videoProcessor.processFps = static_cast<float>(pMainWindowTargetFps.get());
   personSegmenter.aspectRatioPercent = pAspectRatio.get();
@@ -380,6 +394,7 @@ void ofApp::setupGuiParameters() {
     humanGraphicsScene->setSceneLayout(pSceneLayoutId.get());
     humanGraphicsScene->setSceneBehavior(pSceneBehaviorId.get());
   }
+  applyLookSettings();
   applyVideoColorMode();
   rebuildGuiPanel();
   showGuiWindow();
@@ -419,10 +434,16 @@ void ofApp::setupGuiPersistence() {
   guiParams.add(pMergeEventId);
   guiParams.add(pSceneLayoutId);
   guiParams.add(pSceneBehaviorId);
+  guiParams.add(pPaperShadowEnable);
+  guiParams.add(pPaperShadowLift);
+  guiParams.add(pPaperShadowAngle);
+  guiParams.add(pPaperShadowOpacity);
+  guiParams.add(pBackgroundGradientEnable);
+  guiParams.add(pBackgroundGradientDepth);
+  guiParams.add(pBackgroundGradientSpeed);
   guiParams.add(pMainWindowTargetFps);
   guiParams.add(pExportAlpha);
   guiParams.add(pSoundOscEnable);
-  guiParams.add(pSoundOscPort);
 
   // プリセットは見た目・検出設定だけを変更し、現在の入力モード
   // （RealtimeかVideoか）は変更しない。root名はcontrols.jsonと同じにして、
@@ -457,6 +478,13 @@ void ofApp::setupGuiPersistence() {
   presetParams.add(pMergeEventId);
   presetParams.add(pSceneLayoutId);
   presetParams.add(pSceneBehaviorId);
+  presetParams.add(pPaperShadowEnable);
+  presetParams.add(pPaperShadowLift);
+  presetParams.add(pPaperShadowAngle);
+  presetParams.add(pPaperShadowOpacity);
+  presetParams.add(pBackgroundGradientEnable);
+  presetParams.add(pBackgroundGradientDepth);
+  presetParams.add(pBackgroundGradientSpeed);
 
   // 読み込んだプリセットとの差分だけを監視する。Preset Nameや入力モードは
   // presetParamsに含まれないため、保存名の編集中やRealtime切り替えでは
@@ -779,8 +807,15 @@ void ofApp::rebuildGuiPanel() {
   gui.add(pGraphicsOffsetRound);
   gui.add<float>(pGraphicsStrokeWeight);
   gui.add(pGraphicsStrokeRound);
+  gui.add(pPaperShadowEnable);
+  gui.add<float>(pPaperShadowLift);
+  gui.add<float>(pPaperShadowAngle);
+  gui.add<float>(pPaperShadowOpacity);
+  gui.add(pBackgroundGradientEnable);
+  gui.add<float>(pBackgroundGradientDepth);
+  gui.add<float>(pBackgroundGradientSpeed);
   gui.add(pSoundOscEnable);
-  gui.add(pSoundOscPort);
+  gui.add(pSoundOscTarget);
 
   // 動画モード時のみUIを追加
   if (!realtimeMode) {
@@ -1023,10 +1058,6 @@ void ofApp::onSoundOscEnableChanged(bool &value) {
     soundOscSender.setEnabled(value);
     saveGuiSettings();
 }
-void ofApp::onSoundOscPortChanged(int &value) {
-    soundOscSender.setTarget("127.0.0.1", value);
-    saveGuiSettings();
-}
 void ofApp::onGraphicsMergeEnableChanged(bool &value) {
     if (humanGraphicsScene) humanGraphicsScene->enableMerge = value;
     saveGuiSettings();
@@ -1038,6 +1069,24 @@ void ofApp::onGraphicsOffsetSizeChanged(float &value) {
 void ofApp::onGraphicsStrokeWeightChanged(float &value) {
     if (humanGraphicsScene) humanGraphicsScene->strokeWeight = value;
     saveGuiSettings();
+}
+void ofApp::onLookEnableChanged(bool &) {
+    applyLookSettings();
+    saveGuiSettings();
+}
+void ofApp::onLookValueChanged(float &) {
+    applyLookSettings();
+    saveGuiSettings();
+}
+void ofApp::applyLookSettings() {
+    if (!humanGraphicsScene) return;
+    humanGraphicsScene->paperShadow.enabled = pPaperShadowEnable.get();
+    humanGraphicsScene->paperShadow.lift = pPaperShadowLift.get();
+    humanGraphicsScene->paperShadow.angleDegrees = pPaperShadowAngle.get();
+    humanGraphicsScene->paperShadow.opacity = pPaperShadowOpacity.get();
+    humanGraphicsScene->backgroundGradient.enabled = pBackgroundGradientEnable.get();
+    humanGraphicsScene->backgroundGradient.depth = pBackgroundGradientDepth.get();
+    humanGraphicsScene->backgroundGradient.speed = pBackgroundGradientSpeed.get();
 }
 void ofApp::onGraphicsStrokeRoundChanged(bool &value) {
     if (humanGraphicsScene) {
@@ -1425,7 +1474,8 @@ void ofApp::updateImageSequenceExport() {
   ofPushMatrix();
   ofTranslate(exportOffsetX, 0.0f);
   ofScale(exportScale, exportScale);
-  exportScene->draw(false);
+  // 透明書き出しでは背景を描かない。それ以外は背景のグラデーションも書き出す。
+  exportScene->draw(!exportAlpha);
   ofPopMatrix();
   exportFbo.end();
 
