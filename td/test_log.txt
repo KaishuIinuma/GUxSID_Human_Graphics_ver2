@@ -1,0 +1,11 @@
+test start
+timeline play=False rate=60.0 realtime=True
+ms+50 t=507.95 frame=30477 count=1 gates=[1, 0, 0, 0, 0, 0] 0:play 1:cue 2:cue 3:cue 4:cue 5:cue
+ms+150 t=507.95 frame=30477 count=1 gates=[1, 0, 0, 0, 0, 0] 0:play 1:cue 2:cue 3:cue 4:cue 5:cue
+ms+300 t=507.95 frame=30477 count=1 gates=[1, 0, 0, 0, 0, 0] 0:play 1:cue 2:cue 3:cue 4:cue 5:cue
+ms+550 t=507.95 frame=30477 count=1 gates=[1, 0, 0, 0, 0, 0] 0:play 1:cue 2:cue 3:cue 4:cue 5:cue
+ms+700 t=507.95 frame=30477 count=1 gates=[1, 0, 0, 0, 0, 0] 0:play 1:cue 2:cue 3:cue 4:cue 5:cue
+ms+950 t=507.95 frame=30477 count=1 gates=[1, 0, 0, 0, 0, 0] 0:play 1:cue 2:cue 3:cue 4:cue 5:cue
+ms+1100 t=507.95 frame=30477 count=1 gates=[1, 0, 0, 0, 0, 0] 0:play 1:cue 2:cue 3:cue 4:cue 5:cue
+ms+1500 t=507.95 frame=30477 count=1 gates=[1, 0, 0, 0, 0, 0] 0:play 1:cue 2:cue 3:cue 4:cue 5:cue
+ms+3000 t=507.95 frame=30477 count=1 gates=[1, 0, 0, 0, 0, 0] 0:play 1:cue 2:cue 3:cue 4:cue 5:cue

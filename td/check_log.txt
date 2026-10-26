@@ -1,0 +1,7 @@
+project: /Users/kaishu/Library/Mobile Documents/com~apple~CloudDocs/TAU/GUxSID/TouchDesigner/audio2.7.toe
+/project1 children: fx_player(baseCOMP), fx_player_old(baseCOMP)
+oscin anywhere: /project1/fx_player/oscin_fx port=7400 active=True scope=None, /project1/fx_player_old/oscin_fx port=7400 active=True scope=None
+constant pars: [('pageindex', 'Page Index'), ('const', 'Constant'), ('const0name', 'Name'), ('const0value', ''), ('snap', 'Snapshot Input'), ('first', 'First Channel'), ('current', 'Active Needs Current'), ('single', 'Single Sample'), ('start', 'Start'), ('startunit', 'Start Unit'), ('end', 'End'), ('endunit', 'End Unit'), ('rate', 'Sample Rate'), ('left', 'Extend Left'), ('right', 'Extend Right'), ('defval', 'Default Value')]
+select channames style=StrMenu isMenu=True isString=True
+trigger units: [('minsustainunit', 'seconds', ['samples', 'frames', 'seconds', 'fraction']), ('decayunit', 'seconds', ['samples', 'frames', 'seconds', 'fraction']), ('attackunit', 'seconds', ['samples', 'frames', 'seconds', 'fraction'])]
+trigger defaults: threshold=True threshup=0.0
