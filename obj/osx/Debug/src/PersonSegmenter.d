@@ -493,7 +493,7 @@ obj/osx/Debug/src/PersonSegmenter.o: \
   /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/dnn/dnn.inl.hpp \
   /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/dnn/utils/inference_engine.hpp \
   /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/dnn/utils/../dnn.hpp \
-  src/core/HumanContourData.h \
+  src/core/HumanContourData.h src/CoreMLYoloSession.h \
   /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/imgproc.hpp \
   /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/./imgproc/segmentation.hpp \
   src/../third_party/onnxruntime/include/onnxruntime_c_api.h \
@@ -994,6 +994,7 @@ src/PersonSegmenter.h:
 /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/dnn/utils/inference_engine.hpp:
 /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/dnn/utils/../dnn.hpp:
 src/core/HumanContourData.h:
+src/CoreMLYoloSession.h:
 /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/imgproc.hpp:
 /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/./imgproc/segmentation.hpp:
 src/../third_party/onnxruntime/include/onnxruntime_c_api.h:

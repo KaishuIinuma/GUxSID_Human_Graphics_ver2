@@ -495,6 +495,7 @@ dependencies: \
   ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/dnn/utils/inference_engine.hpp \
   ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/dnn/utils/../dnn.hpp \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/core/HumanContourData.h \
+  /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/CoreMLYoloSession.h \
   ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/imgproc.hpp \
   ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/./imgproc/segmentation.hpp \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/../third_party/onnxruntime/include/onnxruntime_c_api.h \

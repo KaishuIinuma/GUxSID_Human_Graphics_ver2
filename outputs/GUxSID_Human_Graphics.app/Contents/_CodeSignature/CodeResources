@@ -18,31 +18,47 @@
 		</data>
 		<key>Resources/data/presets/default.json</key>
 		<data>
-		IP3DDIkGfVf5Z5u2uSGReF4tIlQ=
+		wDHh3QsqKBatZnMF8l7nlJm+lw0=
 		</data>
 		<key>Resources/data/presets/fill.json</key>
 		<data>
-		Q4eFaUFL1ct+XdytaMLV2pQ4oeQ=
-		</data>
-		<key>Resources/data/presets/floating_bridge.json</key>
-		<data>
-		uNhsDkRM8oJQC2EOkTTgKVeK2rU=
+		L+Oo66ExgV0Cg6KvFhyOxEtSBYw=
 		</data>
 		<key>Resources/data/presets/mix_render.json</key>
 		<data>
-		EaV3T6gmL63xtF8eqb5fuRqJaGw=
+		eDtmQypgZmymHuzJTW/EECtc+1o=
 		</data>
 		<key>Resources/data/presets/stroke_Poly.json</key>
 		<data>
-		/E1YQW6ULqJUDMovuxs26p8pWdI=
+		xGyjmxXg1GDGY4tA3XDgqmw12Ds=
 		</data>
 		<key>Resources/data/presets/stroke_Round.json</key>
 		<data>
-		aKuIcrGGNxQ2Wo47PKtvyDbIU+k=
+		gDmKipQjUk/m5dHQh92VLsyVA/c=
 		</data>
 		<key>Resources/data/settings.xml</key>
 		<data>
 		qAeVxsP0KyigYyNYwDs+LV6yZ1Y=
+		</data>
+		<key>Resources/data/yolo11n-seg.mlmodelc/analytics/coremldata.bin</key>
+		<data>
+		cp2jkW842OBFpEsurwa1NjkvAnE=
+		</data>
+		<key>Resources/data/yolo11n-seg.mlmodelc/coremldata.bin</key>
+		<data>
+		Jno8e4ET8zwkDDib5KDHarSwJhI=
+		</data>
+		<key>Resources/data/yolo11n-seg.mlmodelc/metadata.json</key>
+		<data>
+		BFpTxzycy6Tl29D6nMIOklRsCmY=
+		</data>
+		<key>Resources/data/yolo11n-seg.mlmodelc/model.mil</key>
+		<data>
+		v/Embvs4NdBaqpiUlThfd4yq7yc=
+		</data>
+		<key>Resources/data/yolo11n-seg.mlmodelc/weights/weight.bin</key>
+		<data>
+		F+L1Ab9f6AA3fKhoewWvHu1oYII=
 		</data>
 		<key>Resources/data/yolo11n-seg.onnx</key>
 		<data>
@@ -80,42 +96,35 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			BIsyxYy7haWtyHyXUaB/T6EIEBkAY6Grexg+h9NKNsw=
+			WypMjz7nO4pD+yyevouAhbdQxqeiPGN9oTvPE9edAwI=
 			</data>
 		</dict>
 		<key>Resources/data/presets/fill.json</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			ziV9G174EY9u+pd1ch8pAH8Z6PKZT7WRq6r2JagimZU=
-			</data>
-		</dict>
-		<key>Resources/data/presets/floating_bridge.json</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			8Akhz3NjlG0p35lMOAa1RILBLv9cI1gP67DipkngpAk=
+			xoiGvdcZ3pGA8A8v0PK9t0zLKyTUyDaudSQ2PbeA4Mg=
 			</data>
 		</dict>
 		<key>Resources/data/presets/mix_render.json</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			hr6CymoKa3b8QHrqFVq9sijPLczCgofzKAVdDjT7+tg=
+			yjb58OKTL4Atg/on/Luvwk8/TnVD0J9szr1ldNAW5Fo=
 			</data>
 		</dict>
 		<key>Resources/data/presets/stroke_Poly.json</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			wy3BpRHmVywYzy0LvdHyTJWqEQOksS22QCfyF1CbA/o=
+			KAn+D1oQzLwcGuBlvJ9Tu+9BGCIdwNQ/l2P5KZqt5G0=
 			</data>
 		</dict>
 		<key>Resources/data/presets/stroke_Round.json</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			yJeyJJhGEKJM0tyIBIuDhhoUeig+cSewU+6DVz7xr5g=
+			PT2b1y+vQP0loXgO7DNFxhycrk//5QPuYrkZPF4h57E=
 			</data>
 		</dict>
 		<key>Resources/data/settings.xml</key>
@@ -123,6 +132,41 @@
 			<key>hash2</key>
 			<data>
 			2tOGDbFzhd8teTQqe1hIFuA7VrCWK4rkuZ2+arcpBKA=
+			</data>
+		</dict>
+		<key>Resources/data/yolo11n-seg.mlmodelc/analytics/coremldata.bin</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			XB5hKJubZ+VDL+f3r0AF9dprUpYDLW6Ku+tS/xnnZ9M=
+			</data>
+		</dict>
+		<key>Resources/data/yolo11n-seg.mlmodelc/coremldata.bin</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			If5nnhnyyiUGVFJHJ476PmJrniILBbopDslrkZuMM60=
+			</data>
+		</dict>
+		<key>Resources/data/yolo11n-seg.mlmodelc/metadata.json</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			rRJMXwF0EdPNgS7nfBqEYvtod5KGiNB9/Qffv+RxKcM=
+			</data>
+		</dict>
+		<key>Resources/data/yolo11n-seg.mlmodelc/model.mil</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			U2CEWvRpMnPe0ioW6P0rjqq8enAV9MviIIaIR34aE9U=
+			</data>
+		</dict>
+		<key>Resources/data/yolo11n-seg.mlmodelc/weights/weight.bin</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			ozVLlfCeSy6MzGw8Loj27DhdaAh8ZwTRF7j7ZR1MGjY=
 			</data>
 		</dict>
 		<key>Resources/data/yolo11n-seg.onnx</key>

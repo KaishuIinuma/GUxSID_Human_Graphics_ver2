@@ -609,12 +609,12 @@ obj/osx/Debug/src/main.o: \
   src/render/RenderContext.h src/material/MaterialPainter.h \
   src/render/ShapePainter.h src/render/RenderRecipe.h \
   src/render/StrokePass.h src/render/PaperShadowPass.h \
-  src/render/FloatingBridgeRenderRecipe.h \
-  src/render/StandardRenderRecipe.h src/scene/SceneComposer.h \
-  src/scene/StandardSceneBehavior.h src/scene/SceneBehavior.h \
-  src/scene/StandardSceneLayout.h src/scene/SceneLayout.h \
-  src/sound/SoundOscSender.h src/sound/OscUdpSender.h \
-  src/tracking/ObjectTracker.h src/video_Processing.h
+  src/render/BridgeStrokePass.h src/render/StandardRenderRecipe.h \
+  src/scene/SceneComposer.h src/scene/StandardSceneBehavior.h \
+  src/scene/SceneBehavior.h src/scene/StandardSceneLayout.h \
+  src/scene/SceneLayout.h src/sound/SoundOscSender.h \
+  src/sound/OscUdpSender.h src/tracking/ObjectTracker.h \
+  src/video_Processing.h
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/SDKSettings.json:
 src/ofApp.h:
 /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release/libs/openFrameworks/app/ofAppGLFWWindow.h:
@@ -1238,7 +1238,7 @@ src/render/ShapePainter.h:
 src/render/RenderRecipe.h:
 src/render/StrokePass.h:
 src/render/PaperShadowPass.h:
-src/render/FloatingBridgeRenderRecipe.h:
+src/render/BridgeStrokePass.h:
 src/render/StandardRenderRecipe.h:
 src/scene/SceneComposer.h:
 src/scene/StandardSceneBehavior.h:

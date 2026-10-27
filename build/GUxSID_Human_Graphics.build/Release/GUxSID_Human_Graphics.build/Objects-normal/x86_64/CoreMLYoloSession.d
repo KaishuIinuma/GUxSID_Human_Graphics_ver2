@@ -1,0 +1,33 @@
+dependencies: \
+  /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk/SDKSettings.json \
+  /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/CoreMLYoloSession.mm \
+  /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/CoreMLYoloSession.h \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/cvdef.h \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/version.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/hal/interface.h \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/cv_cpu_dispatch.h \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/base.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/opencv_modules.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/cvstd.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/cvstd_wrapper.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/neon_utils.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/vsx_utils.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/check.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/traits.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/matx.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/saturate.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/fast_math.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/matx.inl.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/types.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/mat.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/bufferpool.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/mat.inl.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/persistence.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/operations.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/cvstd.inl.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/utility.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/optim.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/core/ovx.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/imgproc.hpp \
+  ../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/include/opencv2/./imgproc/segmentation.hpp

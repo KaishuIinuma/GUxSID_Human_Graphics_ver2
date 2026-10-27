@@ -617,7 +617,7 @@ dependencies: \
   src/render/ShapePainter.h src/render/RenderRecipe.h \
   src/render/StrokePass.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/render/PaperShadowPass.h \
-  /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/render/FloatingBridgeRenderRecipe.h \
+  /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/render/BridgeStrokePass.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/render/StandardRenderRecipe.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/scene/SceneComposer.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/scene/StandardSceneBehavior.h \
