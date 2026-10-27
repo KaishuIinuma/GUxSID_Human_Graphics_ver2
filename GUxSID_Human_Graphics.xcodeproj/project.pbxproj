@@ -15,6 +15,7 @@
 		7BF4A5BF305E5EED000E3B60 /* PersonSegmenter.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7BF4A5BE305E5EED000E3B60 /* PersonSegmenter.cpp */; };
 		7BF4A5C1305E5EED000E3B60 /* video_Processing.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7BF4A5C0305E5EED000E3B60 /* video_Processing.cpp */; };
 		7BF4A5C4305E664C000E3B60 /* CameraAuthorization.mm in Sources */ = {isa = PBXBuildFile; fileRef = 7BF4A5C3305E664C000E3B60 /* CameraAuthorization.mm */; };
+		CDA410800000000000000003 /* CoreMLYoloSession.mm in Sources */ = {isa = PBXBuildFile; fileRef = CDA410800000000000000002 /* CoreMLYoloSession.mm */; };
 		"7E86742D-DED6-4C1B-998C-4D3903DAA899" /* ofxCvHaarFinder.cpp in Sources */ = {isa = PBXBuildFile; fileRef = "26B09A11-A834-4BE1-8D45-954647C95807" /* ofxCvHaarFinder.cpp */; };
 		"8282573B-2114-44E8-80BF-DC5492D8741F" /* ofxCvColorImage.cpp in Sources */ = {isa = PBXBuildFile; fileRef = "7A387400-4B51-4727-A993-86DCA5D4B6BF" /* ofxCvColorImage.cpp */; };
 		"8E41ABF3-AA8C-43E7-A4B2-69402188D7D8" /* ofxButton.cpp in Sources */ = {isa = PBXBuildFile; fileRef = "5E5C56AC-1FB2-4436-9900-C7DC3ADF1FEF" /* ofxButton.cpp */; };
@@ -551,6 +552,8 @@
 		7BF4A5C0305E5EED000E3B60 /* video_Processing.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = video_Processing.cpp; sourceTree = "<group>"; };
 		7BF4A5C2305E664C000E3B60 /* CameraAuthorization.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CameraAuthorization.h; sourceTree = "<group>"; };
 		7BF4A5C3305E664C000E3B60 /* CameraAuthorization.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = CameraAuthorization.mm; sourceTree = "<group>"; };
+		CDA410800000000000000001 /* CoreMLYoloSession.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CoreMLYoloSession.h; sourceTree = "<group>"; };
+		CDA410800000000000000002 /* CoreMLYoloSession.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = CoreMLYoloSession.mm; sourceTree = "<group>"; };
 		"7C3697E3-125D-44DC-9BE3-52693243BBCE" /* opencl_clfft.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = opencl_clfft.hpp; sourceTree = "<group>"; };
 		"7C3E35D3-784E-4F42-8DC2-345AAFC8D54F" /* simd_utils.impl.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = simd_utils.impl.hpp; sourceTree = "<group>"; };
 		"7CCF7884-11A0-402C-A3E3-24875ABD02F1" /* ofxCvConstants.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = ofxCvConstants.h; sourceTree = "<group>"; };
@@ -3243,6 +3246,8 @@
 				7BF4A5C0305E5EED000E3B60 /* video_Processing.cpp */,
 				7BF4A5C2305E664C000E3B60 /* CameraAuthorization.h */,
 				7BF4A5C3305E664C000E3B60 /* CameraAuthorization.mm */,
+				CDA410800000000000000001 /* CoreMLYoloSession.h */,
+				CDA410800000000000000002 /* CoreMLYoloSession.mm */,
 			);
 			path = src;
 			sourceTree = SOURCE_ROOT;
@@ -3441,6 +3446,7 @@
 				E4B69E210A3A1BDC003C02F2 /* ofApp.cpp in Sources */,
 				"B590B4B1-AA8E-4594-8107-C5AD436371D3" /* HumanGraphicsScene.cpp in Sources */,
 				7BF4A5C4305E664C000E3B60 /* CameraAuthorization.mm in Sources */,
+				CDA410800000000000000003 /* CoreMLYoloSession.mm in Sources */,
 				"BA4E0450-0827-4A78-8C97-4C11575C96BA" /* ofxBaseGui.cpp in Sources */,
 				"8E41ABF3-AA8C-43E7-A4B2-69402188D7D8" /* ofxButton.cpp in Sources */,
 				"DF008186-9533-442D-935A-5E0AE8C8F36E" /* ofxColorPicker.cpp in Sources */,
@@ -3627,6 +3633,8 @@
 				OTHER_LDFLAGS = (
 					"$(OF_CORE_LIBS)",
 					"$(OF_CORE_FRAMEWORKS)",
+					"-framework",
+					CoreML,
 					"$(LIB_OF_RELEASE)",
 					"../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/lib/macos/opencv.xcframework/macos-arm64_x86_64/opencv.a",
 				);
@@ -3762,6 +3770,8 @@
 				OTHER_LDFLAGS = (
 					"$(OF_CORE_LIBS)",
 					"$(OF_CORE_FRAMEWORKS)",
+					"-framework",
+					CoreML,
 					"$(LIB_OF_RELEASE)",
 					"../of_v0.12.1_osx_release/addons/ofxOpenCv/libs/opencv/lib/macos/opencv.xcframework/macos-arm64_x86_64/opencv.a",
 				);

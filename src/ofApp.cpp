@@ -2157,6 +2157,7 @@ void ofApp::drawDebug() {
     info += "Camera frame: " + ofToString(colorImg.getWidth()) + " x " +
             ofToString(colorImg.getHeight()) + "\n";
     info += "AI model loaded: " + string(personSegmenter.isLoaded() ? "Yes" : "No") + "\n";
+    info += "AI backend: " + personSegmenter.backendDescription() + "\n";
     info += "Detected People: " + ofToString(humanData.numHumans) + "\n";
     info += "Threshold: " + ofToString(activeThreshold, 2) + "\n";
   } else {

@@ -3,9 +3,12 @@
 #include "ofMain.h"
 #include <opencv2/dnn.hpp>
 #include "core/HumanContourData.h"
+#include <chrono>
 #include <memory>
+#include <mutex>
 
 class OrtYoloSession;
+class CoreMLYoloSession;
 
 // ============================================
 // YOLO11-seg (Ultralytics) のONNXモデルを使って、
@@ -49,6 +52,8 @@ public:
   bool loadModel(const std::string &modelPath, int inputSizeArg = 640);
   ~PersonSegmenter();
   bool isLoaded() const { return loaded; }
+  // 実際に使っている推論経路 (例: "CoreML CPUAndNeuralEngine")。GUI/ログ表示用。
+  const std::string &backendDescription() const { return backend; }
 
   // rgbFrame: 8UC3のRGB画像（元解像度のまま渡してよい。内部でレターボックスする）
   // outputWidth / outputHeight: 結果の輪郭座標をこの座標系にスケールして返す
@@ -70,9 +75,20 @@ public:
   double minContourArea = 500.0; // これより小さい輪郭はノイズとして除外(出力解像度基準)
 
 private:
+  // modelPath と同じ名前の .mlmodelc があれば Core ML を直接使う (既定: ANE)。
+  // 無い・読めない時は従来の ONNX Runtime (CoreML EP) に戻る。
+  std::unique_ptr<CoreMLYoloSession> coremlSession;
   std::unique_ptr<OrtYoloSession> ortSession;
   bool loaded = false;
   int inputSize = 640;
+  std::string backend = "none";
+
+  // 推論時間の平均を約2秒ごとにログ出力する (インスタンスごとに集計)。
+  int instanceId = 0;
+  std::mutex inferLogMutex;
+  double inferSumMs = 0.0;
+  int inferCount = 0;
+  std::chrono::steady_clock::time_point inferLogAt = std::chrono::steady_clock::now();
 
   struct Detection {
     cv::Rect2f box;                // 640入力空間でのバウンディングボックス(x,y,w,h)

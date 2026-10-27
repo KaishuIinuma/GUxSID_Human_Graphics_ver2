@@ -31,3 +31,35 @@
 2. 結果を見てデフォルトの計算デバイスを決める。
 3. 2カメラ同時取り込み+fps/推論時間表示の検証版を作り、実機で計測する。
 4. 問題なければ、本格的にパイプラインを2系統化する。
+
+## 追記 (2026-10-27 午後): Core ML 直接実行で ANE を本採用
+- 前回の比較 (ONNX Runtime の CoreML EP 経由) では ANE 20.6ms / GPU 7.9ms で GPU を既定にしていた。
+- 遅かったのは ONNX Runtime 経由の変換が原因。Core ML 用に書き出したモデル (FP16) を
+  Core ML から直接読むと、M5 で次のようになった (C++、入力コピーと FP16→FP32 変換込み):
+  | 経路 | 1回 | 2カメラ並列 (2回分) |
+  |---|---|---|
+  | Core ML 直接 / ANE | 約2.0ms | 約2.9ms |
+  | Core ML 直接 / GPU | 約3.1ms | 約4.3ms |
+  | ONNX Runtime / GPU (旧既定) | 約7.9ms | - |
+- 精度: bus.jpg で ONNX 版と同じ4人を検出。ボックスの差は数px、マスクの一致率 96〜98%。
+
+### 変更点
+- 新規 src/CoreMLYoloSession.h / .mm: Core ML で YOLO を動かすクラス。出力は ONNX 版と同じ形なので、デコード処理は共通。
+- src/PersonSegmenter: yolo11n-seg.onnx と同じ名前の yolo11n-seg.mlmodelc が data/ にあれば Core ML (既定 ANE) を使う。無い・読めない時は従来の ONNX Runtime (GPU) に戻る。
+  推論時間ログはカメラごと (#1/#2) に分けた。デバッグ表示に「AI backend」行を追加。
+- bin/data/yolo11n-seg.mlmodelc: コンパイル済みモデル (5.8MB)。作り直しは tools/export_yolo_coreml.sh。
+- リンク設定: Xcode プロジェクトと config.make に `-framework CoreML` を追加。
+
+### 切り替え (環境変数)
+- GUXSID_COREML_UNITS=CPUAndGPU など: 計算デバイスを変える (Core ML 直接・ONNX Runtime 共通)。
+- GUXSID_YOLO_BACKEND=onnx: 旧経路 (ONNX Runtime) に戻す。
+
+### 実カメラでの計測 (2026-10-27, 2系統とも MacBook Pro 内蔵カメラを共有, 約50秒)
+- ログ: bin/log_ane_native.txt
+- #1: 平均 5.2ms (最大 6.5ms) / #2: 平均 5.0ms (最大 6.3ms)、どちらも約30回/秒 (カメラのfps上限)。
+- 前の GPU 版 (bin/log_ver2_dual.txt) は平均 10.6ms (最大 13.0ms)。約半分になった。
+- 単体テストの約2ms より長いのは、2系統が同時に ANE を使うことと描画などの負荷のため。
+- 検出人数・輪郭の見た目は確認していない (画面は見ていない)。
+
+### 未確認
+- 320 入力用モデルは ONNX 版も無いので未作成 (必要なら export スクリプトに 320 を渡す)。

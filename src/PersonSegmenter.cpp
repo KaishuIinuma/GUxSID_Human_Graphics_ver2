@@ -1,14 +1,28 @@
 #include "PersonSegmenter.h"
+#include "CoreMLYoloSession.h"
 #include <opencv2/imgproc.hpp>
 #include <algorithm>
 #include <chrono>
 #include <climits>
 #include <cmath>
 #include <cstdlib>
+#include <mutex>
 #include <dlfcn.h>
 #include <filesystem>
 #include <stdexcept>
 #include "../third_party/onnxruntime/include/onnxruntime_c_api.h"
+
+namespace {
+// 計算デバイス。環境変数 GUXSID_COREML_UNITS があればそれを使う
+//   (CPUAndNeuralEngine / CPUAndGPU / ALL / CPUOnly)。
+// 無い時の既定は経路ごとに速い方:
+//   Core ML 直接 -> ANE (M5実測 約2ms) / ONNX Runtime 経由 -> GPU (約7.9ms)
+std::string computeUnitsFor(const char *fallback) {
+  if (const char *units = std::getenv("GUXSID_COREML_UNITS"); units && *units)
+    return units;
+  return fallback;
+}
+} // namespace
 
 // The official macOS arm64 runtime is loaded from data so both the OF make
 // build and the Xcode app bundle use the same, self-contained CoreML backend.
@@ -39,15 +53,7 @@ public:
         const std::string cache = cachePath.string();
         std::vector<const char *> keys = {"ModelFormat", "MLComputeUnits",
                                           "RequireStaticInputShapes", "ModelCacheDirectory"};
-        // 計算デバイス: 既定はGPU。
-        // 環境変数 GUXSID_COREML_UNITS で切替可能
-        //   (CPUAndNeuralEngine / CPUAndGPU / ALL / CPUOnly)。
-        std::string computeUnits = "CPUAndGPU";
-        if (const char *units = std::getenv("GUXSID_COREML_UNITS");
-            units && *units) {
-          computeUnits = units;
-        }
-        ofLogNotice("PersonSegmenter") << "CoreML MLComputeUnits: " << computeUnits;
+        const std::string computeUnits = computeUnitsFor("CPUAndGPU");
         std::vector<const char *> values = {"MLProgram", computeUnits.c_str(), "1",
                                             cache.c_str()};
         // Opt in when validating operation placement on a particular Mac.
@@ -174,20 +180,52 @@ private:
   int expectedInputSize = 0;
 };
 
-PersonSegmenter::PersonSegmenter() = default;
+PersonSegmenter::PersonSegmenter() {
+  static int nextInstanceId = 1;
+  instanceId = nextInstanceId++;
+}
 PersonSegmenter::~PersonSegmenter() = default;
 
 //--------------------------------------------------------------
 bool PersonSegmenter::loadModel(const std::string &modelPath, int inputSizeArg) {
   inputSize = inputSizeArg;
-  try {
-    ortSession = std::make_unique<OrtYoloSession>(modelPath, inputSize);
-    loaded = true;
-    ofLogNotice("PersonSegmenter") << "YOLO CoreML MLProgram loaded: " << modelPath;
-  } catch (const std::exception &e) {
-    ofLogError("PersonSegmenter") << "YOLO CoreML load failed: " << e.what();
-    ortSession.reset();
-    loaded = false;
+  coremlSession.reset();
+  ortSession.reset();
+  loaded = false;
+  backend = "none";
+
+  // GUXSID_YOLO_BACKEND=onnx で Core ML 直接経路を使わない (比較・切り分け用)。
+  const char *forced = std::getenv("GUXSID_YOLO_BACKEND");
+  const bool allowCoreML = !(forced && std::string(forced) == "onnx");
+  const std::string coremlPath =
+      std::filesystem::path(modelPath).replace_extension(".mlmodelc").string();
+  if (allowCoreML && std::filesystem::exists(coremlPath)) {
+    const std::string units = computeUnitsFor("CPUAndNeuralEngine");
+    try {
+      coremlSession = std::make_unique<CoreMLYoloSession>(coremlPath, inputSize, units);
+      loaded = true;
+      backend = "CoreML " + units;
+    } catch (const std::exception &e) {
+      ofLogWarning("PersonSegmenter") << "Core ML model failed, falling back to ONNX Runtime: "
+                                      << e.what();
+      coremlSession.reset();
+    }
+  }
+
+  if (!loaded) {
+    try {
+      ortSession = std::make_unique<OrtYoloSession>(modelPath, inputSize);
+      loaded = true;
+      backend = "ONNXRuntime " + computeUnitsFor("CPUAndGPU");
+    } catch (const std::exception &e) {
+      ofLogError("PersonSegmenter") << "YOLO load failed: " << e.what();
+      ortSession.reset();
+    }
+  }
+  if (loaded) {
+    ofLogNotice("PersonSegmenter") << "#" << instanceId << " YOLO loaded (" << backend
+                                   << ", input " << inputSize << "): "
+                                   << (coremlSession ? coremlPath : modelPath);
   }
   return loaded;
 }
@@ -248,31 +286,35 @@ HumanContourData PersonSegmenter::detect(const cv::Mat &rgbFrame, int outputWidt
   }
   cv::Mat letterboxed = letterbox(*detectionFrame, scale, padX, padY);
 
-  // 0〜1正規化してNCHW形式のblobを作成（入力は既にRGB前提なのでswapRB=false）
-  cv::Mat blob = cv::dnn::blobFromImage(
-      letterboxed, 1.0 / 255.0, cv::Size(inputSize, inputSize),
-      cv::Scalar(0, 0, 0), false, false);
   std::vector<cv::Mat> outs;
   try {
     const auto inferStart = std::chrono::steady_clock::now();
-    outs = ortSession->run(blob);
+    if (coremlSession) {
+      // Core ML は画像入力 (0〜255 -> 0〜1 の正規化はモデル側) なのでそのまま渡す。
+      outs = coremlSession->run(letterboxed);
+    } else {
+      // 0〜1正規化してNCHW形式のblobを作成（入力は既にRGB前提なのでswapRB=false）
+      cv::Mat blob = cv::dnn::blobFromImage(
+          letterboxed, 1.0 / 255.0, cv::Size(inputSize, inputSize),
+          cv::Scalar(0, 0, 0), false, false);
+      outs = ortSession->run(blob);
+    }
     // 計算デバイス比較用: 推論時間(ms)を約2秒ごとに平均してログ出力する。
-    static double inferSumMs = 0.0;
-    static int inferCount = 0;
-    static auto inferLogAt = std::chrono::steady_clock::now();
+    std::lock_guard<std::mutex> inferLogLock(inferLogMutex);
     inferSumMs += std::chrono::duration<double, std::milli>(
                       std::chrono::steady_clock::now() - inferStart).count();
     ++inferCount;
     if (std::chrono::steady_clock::now() - inferLogAt > std::chrono::seconds(2)) {
-      ofLogNotice("PersonSegmenter") << "YOLO inference avg: "
+      ofLogNotice("PersonSegmenter") << "#" << instanceId << " YOLO inference avg: "
                                      << (inferSumMs / inferCount) << " ms ("
-                                     << inferCount << " runs, input " << inputSize << ")";
+                                     << inferCount << " runs, " << backend
+                                     << ", input " << inputSize << ")";
       inferSumMs = 0.0;
       inferCount = 0;
       inferLogAt = std::chrono::steady_clock::now();
     }
   } catch (const std::exception &e) {
-    ofLogError("PersonSegmenter") << "YOLO CoreML inference failed: " << e.what();
+    ofLogError("PersonSegmenter") << "YOLO inference failed (" << backend << "): " << e.what();
     return result;
   }
 

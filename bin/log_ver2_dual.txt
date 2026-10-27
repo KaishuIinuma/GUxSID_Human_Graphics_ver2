@@ -1,0 +1,25 @@
+[notice ] DataPath: Using bundled data directory: /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/bin/GUxSID_Human_Graphics.app/Contents/Resources/data
+[notice ] Device: 0: ‎MacBook Proのカメラ
+[notice ] Device: 1: ‎ぬまiPhone13のカメラ
+[notice ] Camera 0: ‎MacBook Proのカメラ
+[notice ] Camera 1: ‎ぬまiPhone13のカメラ
+[notice ] PersonSegmenter: CoreML MLComputeUnits: CPUAndGPU
+[notice ] PersonSegmenter: YOLO CoreML MLProgram loaded: /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/bin/GUxSID_Human_Graphics.app/Contents/Resources/data/yolo11n-seg.onnx
+[notice ] PersonSegmenter: CoreML MLComputeUnits: CPUAndGPU
+[notice ] PersonSegmenter: YOLO CoreML MLProgram loaded: /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/bin/GUxSID_Human_Graphics.app/Contents/Resources/data/yolo11n-seg.onnx
+[notice ] SoundOscSender: OSC送信先: 127.0.0.1:7400
+[notice ] Camera 1 -> device 0: ‎MacBook Proのカメラ
+[notice ] PersonSegmenter: YOLO inference avg: 12.7328 ms (37 runs, input 640)
+[notice ] PersonSegmenter: YOLO inference avg: 8.7998 ms (50 runs, input 640)
+[notice ] PersonSegmenter: YOLO inference avg: 9.10905 ms (49 runs, input 640)
+[notice ] PersonSegmenter: YOLO inference avg: 9.26604 ms (50 runs, input 640)
+[notice ] PersonSegmenter: YOLO inference avg: 8.92026 ms (46 runs, input 640)
+[notice ] PersonSegmenter: YOLO inference avg: 9.24686 ms (48 runs, input 640)
+[notice ] PersonSegmenter: YOLO inference avg: 10.5609 ms (57 runs, input 640)
+[notice ] PersonSegmenter: YOLO inference avg: 10.8283 ms (61 runs, input 640)
+[notice ] PersonSegmenter: YOLO inference avg: 12.1075 ms (57 runs, input 640)
+[notice ] PersonSegmenter: YOLO inference avg: 11.265 ms (53 runs, input 640)
+[notice ] PersonSegmenter: YOLO inference avg: 10.0839 ms (60 runs, input 640)
+[notice ] PersonSegmenter: YOLO inference avg: 12.9887 ms (58 runs, input 640)
+[notice ] PersonSegmenter: YOLO inference avg: 12.2916 ms (53 runs, input 640)
+[notice ] PersonSegmenter: YOLO inference avg: 10.0158 ms (55 runs, input 640)

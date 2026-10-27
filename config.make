@@ -78,6 +78,8 @@ OF_ROOT = /Users/kaishu/Documents/OpenFrameWork/of_v0.12.1_osx_release
 # incorporated directly into the final executable application binary.
 # TODO: should this be a default setting?
 # PROJECT_LDFLAGS=-Wl,-rpath=./libs
+# YOLO を Core ML で直接動かす (src/CoreMLYoloSession.mm)
+PROJECT_LDFLAGS += -framework CoreML
 
 ################################################################################
 # PROJECT DEFINES
