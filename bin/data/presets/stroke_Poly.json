@@ -15,6 +15,7 @@
     "Graphics_Base_Enable": "0",
     "Graphics_Offset_Enable": "1",
     "Graphics_Stroke_Enable": "1",
+    "Graphics_Bridge_Stroke_Enable": "0",
     "Graphics_Offset_Size": "200",
     "Scale": "1",
     "Graphics_Offset_Round_Mode": "0",

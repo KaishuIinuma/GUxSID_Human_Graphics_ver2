@@ -55,7 +55,7 @@ public:
   // 輪郭のリサンプリング頂点数（scene1〜4共通、GUI/キー操作で変更可能）
   static inline int vertexCount = 16;
 
-  static inline int background_color = 248;
+  static inline int background_color = 252;
 
   // HumanGraphicsSceneの人物グラフィック結合方法。
   // RenderedGraphic: 実際に描画するポリゴン／ストロークが接触した時だけ結合する。
@@ -118,6 +118,25 @@ public:
   ofEventListener presetParameterChangedListener;
 
   void onCameraIndexChanged(int &index); // カメラIDが変更された時のリスナー
+
+  // ============================================
+  // 2入力: 系統ごとのカメラ選択
+  // pCameraIndex = カメラ1(上段), pCamera2Index = カメラ2(下段)。
+  // Controlsには認識したカメラを「番号: 名前」のトグルで並べ、1つだけ選べる。
+  // 2系統が同じカメラを選んだ場合は、カメラ2を開かずカメラ1の映像を共有する。
+  // ============================================
+  ofParameter<int> pCamera2Index;
+  void onCamera2IndexChanged(int &index);
+  ofParameterGroup cameraChoiceGroups[2];
+  std::vector<ofParameter<bool>> cameraChoices[2];
+  ofEventListeners cameraChoiceListeners;
+  // 実際に開いているデバイス番号 (-1 = 閉じている / カメラ2は共有中)
+  int openedCameraDevice[2] = {-1, -1};
+  void setupCameraChoices();
+  void syncCameraChoices();
+  void onCameraChoiceChanged(int input, int device, bool value);
+  void applyCameraSelection();
+  static std::string cameraDisplayName(const ofVideoDevice &device);
 
   // ============================================
   // ★追加: 読み取った映像の左右反転（Realtimeモードのみ有効）
@@ -209,6 +228,7 @@ public:
   ofParameter<bool> pGraphicsEnableBase;   // ベース描画のON/OFF
   ofParameter<bool> pGraphicsEnableOffset; // オフセット描画のON/OFF
   ofParameter<bool> pGraphicsEnableStroke; // ストローク描画のON/OFF
+  ofParameter<bool> pGraphicsEnableBridgeStroke; // 重心を結ぶストロークのON/OFF
   ofParameter<bool> pGraphicsMergeEnable;  // 人物グラフィック結合のON/OFF
   ofParameter<float> pGraphicsOffsetSize;  // オフセットサイズ
   ofParameter<float> pGraphicsOffsetScale;
@@ -246,6 +266,7 @@ public:
   void onGraphicsEnableBaseChanged(bool &value);
   void onGraphicsEnableOffsetChanged(bool &value);
   void onGraphicsEnableStrokeChanged(bool &value);
+  void onGraphicsEnableBridgeStrokeChanged(bool &value);
   void onGraphicsMergeEnableChanged(bool &value);
   void onGraphicsOffsetSizeChanged(float &value);
   void onGraphicsOffsetScaleChanged(float &value);
@@ -408,8 +429,10 @@ public:
   ofPixels exportPixels;
   std::shared_ptr<HumanGraphicsScene> exportScene;
 
-  // カメラ入力
+  // カメラ入力 (cam = カメラ1 / cam2 = カメラ2。cam2はカメラ1と別の機器の時だけ開く)
   ofVideoGrabber cam;
+  ofVideoGrabber cam2;
+  ofxCvColorImage colorImg2;
 
   // 画像処理バッファ（カメラ画像の一時保持・左右反転に使用）
   ofxCvColorImage colorImg;
@@ -428,6 +451,37 @@ public:
   // Realtime推論は一度に一件。GUI設定やVideoへの切替時には完了を待つ。
   // ============================================
   std::future<HumanContourData> detectionFuture;
+
+  // ============================================
+  // 2画面モード (2入力2出力)
+  // 出力キャンバス3840x2160に、3550x950の映像を上下2段で置く。
+  //   上段 (0, 0)    : 系統1 → プロジェクター左2台
+  //   下段 (0, 1080) : 系統2 → プロジェクター右2台 (キャンバスセンターラインから)
+  // それ以外は黒。Realtimeモードで Dual Output がONの間だけ有効。
+  // 系統1は既存の humanGraphicsScene / personSegmenter / humanData を使い、
+  // 系統2は下の *2 のメンバーを使う。GUI設定は毎フレーム系統1から写す。
+  // カメラ2がカメラ1と同じデバイスなら、カメラ1のフレームを共有する。
+  // ============================================
+  static constexpr int kDualCanvasWidth = 3840;
+  static constexpr int kDualCanvasHeight = 2160;
+  static constexpr int kDualBandWidth = 3550;
+  static constexpr int kDualBandHeight = 950;
+  static constexpr int kDualUpperBandY = 0;
+  static constexpr int kDualLowerBandY = 1080;
+  // Controls の「Dual Output (2 Screens)」で切り替える。Realtime モードのときだけ有効。
+  ofParameter<bool> pDualOutput;
+  void onDualOutputChanged(bool &value);
+  bool guiRebuildPending = false;
+  bool dualOutputActive() const { return realtimeMode && pDualOutput.get(); }
+  std::shared_ptr<HumanGraphicsScene> humanGraphicsScene2;
+  PersonSegmenter personSegmenter2;
+  std::future<HumanContourData> detectionFuture2;
+  HumanContourData humanData2;
+  uint64_t lastRealtimeProcessMs2 = 0;
+  ofFbo dualBandFbo[2];
+  void syncSecondPipelineSettings();
+  void allocateDualBandFbos();
+  void drawDualOutput();
 
   // サイズ定義（Webカメラ入力の解像度。動画モードの解像度とは別物）
   const int W = 1920;

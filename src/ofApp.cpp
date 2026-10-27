@@ -26,6 +26,24 @@ std::string userPresetDirectoryPath() {
   return ofFilePath::join(settingsDirectoryPath(), kPresetDirectoryName);
 }
 
+// 廃止したモード用のプリセット。以前の配布版や保存先に残っていれば消す。
+const std::vector<std::string> kObsoletePresetFileNames = {
+    "floating_bridge.json",
+};
+
+void removeObsoletePresetFiles(const std::string &directoryPath) {
+  for (const auto &fileName : kObsoletePresetFileNames) {
+    const std::string path = ofFilePath::join(directoryPath, fileName);
+    ofFile file(path);
+    if (!file.exists()) continue;
+    if (file.remove()) {
+      ofLogNotice("ofApp") << "廃止したプリセットを削除しました: " << path;
+    } else {
+      ofLogWarning("ofApp") << "廃止したプリセットを削除できませんでした: " << path;
+    }
+  }
+}
+
 std::string lowerCase(std::string value) {
   std::transform(value.begin(), value.end(), value.begin(),
                  [](unsigned char character) {
@@ -132,6 +150,23 @@ void drawSourceCropOverview(const ofTexture &texture, int sourceWidth,
                               imageY - 8.0f);
   ofPopStyle();
 }
+// 推論スレッドの結果を受け取る。applyResult=falseなら完了を待って捨てる。
+void takeDetectionResult(std::future<HumanContourData> &future,
+                         HumanContourData &target, bool applyResult) {
+  if (!future.valid()) return;
+  try {
+    HumanContourData result = future.get();
+    if (applyResult) target = std::move(result);
+  } catch (const std::exception &e) {
+    ofLogError("ofApp") << "Realtime detection failed: " << e.what();
+  }
+}
+
+bool isFutureReady(const std::future<HumanContourData> &future) {
+  return future.valid() &&
+         future.wait_for(std::chrono::milliseconds(0)) ==
+             std::future_status::ready;
+}
 } // namespace
 
 //--------------------------------------------------------------
@@ -164,6 +199,7 @@ void ofApp::setup() {
 
   // メモリ領域を確保
   colorImg.allocate(W, H);
+  colorImg2.allocate(W, H);
 
   // ============================================
   // ★変更: YOLO11-seg (person専用) ONNXモデルの読み込み
@@ -172,6 +208,8 @@ void ofApp::setup() {
   // ============================================
   string modelPath = ofToDataPath("yolo11n-seg.onnx", true);
   bool modelOk = personSegmenter.loadModel(modelPath, 640);
+  // 系統2(下段)用。推論を並行して回すため、セッションを別に持つ。
+  personSegmenter2.loadModel(modelPath, 640);
   if (!modelOk) {
     ofLogError() << "YOLOモデルの読み込みに失敗しました。data/に"
                      "yolo11n-seg.onnx を配置しているか確認してください: " << modelPath;
@@ -182,6 +220,8 @@ void ofApp::setup() {
   humanGraphicsScene = std::make_shared<HumanGraphicsScene>();
   humanGraphicsScene->setup();
   currentScene = humanGraphicsScene;
+  humanGraphicsScene2 = std::make_shared<HumanGraphicsScene>();
+  humanGraphicsScene2->setup();
 
   // デバッグ画面は基本「非表示」
   showDebug = false;
@@ -227,6 +267,9 @@ void ofApp::setupGuiParameters() {
   
   string defaultCamName = cameraDevices.empty() ? "No Camera Found" : cameraDevices[defaultCameraIndex].deviceName;
   pCameraName.set("Camera Name", defaultCamName);
+  // 仮の既定値: カメラ2もカメラ1と同じ機器 (共有) にする。
+  pCamera2Index.set("Camera 2 ID", defaultCameraIndex, 0, maxCameraIndex);
+  setupCameraChoices();
 
   discoverPresetFiles();
   pPresetIndex.set("Preset ID", static_cast<int>(presetPaths.size()), 0,
@@ -237,6 +280,7 @@ void ofApp::setupGuiParameters() {
   // ★追加: 左右反転トグル（デフォルトOFF）
   pFlipHorizontal.set("Flip Horizontal", false);
   pProjectionSafeArea.set("Projection Margin", true);
+  pDualOutput.set("Dual Output (2 Screens)", false);
 
   pYoloConfidence.set("YOLO Confidence",
                       personSegmenter.yoloConfidenceThreshold, 0.0f, 1.0f);
@@ -257,6 +301,7 @@ void ofApp::setupGuiParameters() {
   pGraphicsEnableBase.set("Graphics Base Enable", true);
   pGraphicsEnableOffset.set("Graphics Offset Enable", true);
   pGraphicsEnableStroke.set("Graphics Stroke Enable", true);
+  pGraphicsEnableBridgeStroke.set("Graphics Bridge Stroke Enable", false);
   pGraphicsMergeEnable.set("Graphics Merge Enable", true);
   pGraphicsOffsetSize.set("Graphics Offset Size", 200.0f, 0.0f, 600.0f);
   pGraphicsOffsetScale.set("Scale", 1.0f, 0.1f, 2.0f);
@@ -285,6 +330,7 @@ void ofApp::setupGuiParameters() {
   pGraphicsEnableBase.addListener(this, &ofApp::onGraphicsEnableBaseChanged);
   pGraphicsEnableOffset.addListener(this, &ofApp::onGraphicsEnableOffsetChanged);
   pGraphicsEnableStroke.addListener(this, &ofApp::onGraphicsEnableStrokeChanged);
+  pGraphicsEnableBridgeStroke.addListener(this, &ofApp::onGraphicsEnableBridgeStrokeChanged);
   pGraphicsMergeEnable.addListener(this, &ofApp::onGraphicsMergeEnableChanged);
   pGraphicsOffsetSize.addListener(this, &ofApp::onGraphicsOffsetSizeChanged);
   pGraphicsOffsetScale.addListener(this, &ofApp::onGraphicsOffsetScaleChanged); // ★追加
@@ -326,9 +372,11 @@ void ofApp::setupGuiParameters() {
   }
 
   pCameraIndex.addListener(this, &ofApp::onCameraIndexChanged);
+  pCamera2Index.addListener(this, &ofApp::onCamera2IndexChanged);
   pRealtime.addListener(this, &ofApp::onRealtimeChanged);
   pFlipHorizontal.addListener(this, &ofApp::onFlipHorizontalChanged);
   pProjectionSafeArea.addListener(this, &ofApp::onProjectionSafeAreaChanged);
+  pDualOutput.addListener(this, &ofApp::onDualOutputChanged);
   // 保存済みの投影余白設定に合わせて、起動時のMain Window比率を決める。
   applyMainWindowAspectLock();
   pYoloConfidence.addListener(this, &ofApp::onYoloConfidenceChanged);
@@ -375,6 +423,7 @@ void ofApp::setupGuiParameters() {
     humanGraphicsScene->enableBase = pGraphicsEnableBase.get();
     humanGraphicsScene->enableOffset = pGraphicsEnableOffset.get();
     humanGraphicsScene->enableStroke = pGraphicsEnableStroke.get();
+    humanGraphicsScene->enableBridgeStroke = pGraphicsEnableBridgeStroke.get();
     humanGraphicsScene->enableMerge = pGraphicsMergeEnable.get();
     humanGraphicsScene->enableLooseContour = pLooseContour.get();
     humanGraphicsScene->looseContourStrength = pLooseContourStrength.get();
@@ -406,8 +455,10 @@ void ofApp::setupGuiPersistence() {
   guiParams.setName("ControlsSettings");
   guiParams.add(pRealtime);
   guiParams.add(pCameraIndex);
+  guiParams.add(pCamera2Index);
   guiParams.add(pFlipHorizontal);
   guiParams.add(pProjectionSafeArea);
+  guiParams.add(pDualOutput);
   guiParams.add(pYoloConfidence);
   guiParams.add(pYoloInput320);
   guiParams.add(pVertexCount);
@@ -423,6 +474,7 @@ void ofApp::setupGuiPersistence() {
   guiParams.add(pGraphicsEnableBase);
   guiParams.add(pGraphicsEnableOffset);
   guiParams.add(pGraphicsEnableStroke);
+  guiParams.add(pGraphicsEnableBridgeStroke);
   guiParams.add(pGraphicsMergeEnable);
   guiParams.add(pGraphicsOffsetSize);
   guiParams.add(pGraphicsOffsetRound);
@@ -467,6 +519,7 @@ void ofApp::setupGuiPersistence() {
   presetParams.add(pGraphicsEnableBase);
   presetParams.add(pGraphicsEnableOffset);
   presetParams.add(pGraphicsEnableStroke);
+  presetParams.add(pGraphicsEnableBridgeStroke);
   presetParams.add(pGraphicsMergeEnable);
   presetParams.add(pGraphicsOffsetSize);
   presetParams.add(pGraphicsOffsetRound);
@@ -563,6 +616,7 @@ void ofApp::discoverPresetFiles() {
   for (const auto &directoryPath : directories) {
     ofDirectory directory(directoryPath);
     if (!directory.exists()) continue;
+    removeObsoletePresetFiles(directoryPath);
     directory.allowExt("json");
     directory.listDir();
     for (const auto &file : directory.getFiles()) {
@@ -773,8 +827,9 @@ void ofApp::rebuildGuiPanel() {
 
   // ★追加: Realtime(カメラ)モードの時だけカメラ選択UI・左右反転トグルを表示
   if (realtimeMode) {
-      gui.add(pCameraIndex);
-      gui.add(pCameraName);
+      gui.add(pDualOutput);
+      gui.add(cameraChoiceGroups[0]);
+      if (dualOutputActive()) gui.add(cameraChoiceGroups[1]);
       gui.add(pFlipHorizontal);
   }
 
@@ -802,6 +857,7 @@ void ofApp::rebuildGuiPanel() {
   gui.add(pGraphicsEnableBase);
   gui.add(pGraphicsEnableOffset);
   gui.add(pGraphicsEnableStroke);
+  gui.add(pGraphicsEnableBridgeStroke);
   gui.add(pGraphicsMergeEnable);
   gui.add<float>(pGraphicsOffsetSize);
   gui.add(pGraphicsOffsetRound);
@@ -872,13 +928,9 @@ void ofApp::applyTargetFrameRate(int value) {
 }
 
 void ofApp::finishRealtimeDetection(bool applyResult) {
-  if (!detectionFuture.valid()) return;
-  try {
-    HumanContourData result = detectionFuture.get();
-    if (applyResult) humanData = std::move(result);
-  } catch (const std::exception &e) {
-    ofLogError("ofApp") << "Realtime detection failed: " << e.what();
-  }
+  // 設定変更の前に呼ばれるので、2系統とも推論の完了を待つ。
+  takeDetectionResult(detectionFuture, humanData, applyResult);
+  takeDetectionResult(detectionFuture2, humanData2, applyResult);
 }
 
 //--------------------------------------------------------------
@@ -911,7 +963,14 @@ void ofApp::onYoloInput320Changed(bool &value) {
     personSegmenter.loadModel(ofToDataPath("yolo11n-seg.onnx", true), 640);
     pYoloInput320.setWithoutEventNotifications(false);
   }
+  // 系統2も同じモデルに揃える。
+  personSegmenter2.loadModel(
+      ofToDataPath(pYoloInput320.get() ? "yolo11n-seg-320.onnx"
+                                       : "yolo11n-seg.onnx", true),
+      pYoloInput320.get() ? 320 : 640);
   humanData = HumanContourData();
+  humanData2 = HumanContourData();
+  lastRealtimeProcessMs2 = 0;
   videoProcessor.requestReprocess();
   lastRealtimeProcessMs = 0;
   saveGuiSettings();
@@ -1054,6 +1113,10 @@ void ofApp::onGraphicsEnableStrokeChanged(bool &value) {
     if (humanGraphicsScene) humanGraphicsScene->enableStroke = value;
     saveGuiSettings();
 }
+void ofApp::onGraphicsEnableBridgeStrokeChanged(bool &value) {
+    if (humanGraphicsScene) humanGraphicsScene->enableBridgeStroke = value;
+    saveGuiSettings();
+}
 void ofApp::onSoundOscEnableChanged(bool &value) {
     soundOscSender.setEnabled(value);
     saveGuiSettings();
@@ -1112,8 +1175,7 @@ void ofApp::onGraphicsStrokeMaterialChanged(int &value) {
 void ofApp::onRenderRecipeIdChanged(string &value) {
     const bool isKnownRecipe =
         value == gux::StandardRenderRecipe::RecipeId ||
-        value == gux::MixRenderRecipe::RecipeId ||
-        value == gux::FloatingBridgeRenderRecipe::RecipeId;
+        value == gux::MixRenderRecipe::RecipeId;
     const std::string activeId = isKnownRecipe
         ? value : std::string(gux::StandardRenderRecipe::RecipeId);
     if (!isKnownRecipe) {
@@ -1177,7 +1239,7 @@ void ofApp::onRealtimeChanged(bool &value) {
   } else {
     // VideoモードではCMIOのカメラ転送スレッドを残さない。
     // AVFoundation動画再生との併存によるメモリ破壊を防ぐ。
-    cam.close();
+    applyCameraSelection(); // realtimeMode=false なので両方閉じる
     ofLogNotice("ofApp") << "Videoモードへ移行したためカメラを閉じました。";
     // 読み込み済みの動画があれば、その比率でMain Windowを固定し直す。
     applyMainWindowAspectLock();
@@ -1637,8 +1699,8 @@ void ofApp::applyMainWindowAspectLock() {
     return;
   }
 
-  // 投影余白がONの間は、4K(16:9)の比率に固定して余白の位置を保つ。
-  if (pProjectionSafeArea.get()) {
+  // 投影余白がONの間と2出力中は、4K(16:9)の比率に固定して配置を保つ。
+  if (pProjectionSafeArea.get() || dualOutputActive()) {
     glfwSetWindowAspectRatio(handle, kProjectionFrameWidth,
                              kProjectionFrameHeight);
     return;
@@ -1831,24 +1893,106 @@ void ofApp::onRecreatedMainWindowExit(ofEventArgs &args) {
 // ★追加: カメラデバイス切り替え用リスナー
 // ============================================
 void ofApp::onCameraIndexChanged(int &index) {
-    if (index >= 0 && index < cameraDevices.size()) {
-        // カメラの名前表示を更新
-        pCameraName = cameraDevices[index].deviceName;
+  if (index < 0 || index >= static_cast<int>(cameraDevices.size())) return;
+  // カメラの名前表示を更新
+  pCameraName = cameraDevices[index].deviceName;
+  syncCameraChoices();
+  applyCameraSelection();
+  saveGuiSettings();
+}
 
-        // Videoモードではカメラデバイスを開かない。
-        if (!realtimeMode) {
-            saveGuiSettings();
-            return;
-        }
+void ofApp::onCamera2IndexChanged(int &index) {
+  if (index < 0 || index >= static_cast<int>(cameraDevices.size())) return;
+  syncCameraChoices();
+  applyCameraSelection();
+  saveGuiSettings();
+}
 
-        // 既存のカメラを閉じて、新しいIDで開き直す
-        cam.close();
-        cam.setDeviceID(index);
-        cam.setup(W, H); // W, H は ofApp.h で定義されている解像度
-        
-        ofLogNotice() << "Switched to Camera " << index << ": " << cameraDevices[index].deviceName;
-        saveGuiSettings();
+// 「番号: 名前」。macOSの名前の先頭に付く方向制御文字(U+200E)は取り除く。
+std::string ofApp::cameraDisplayName(const ofVideoDevice &device) {
+  std::string name = device.deviceName;
+  const std::string lrm = "\xE2\x80\x8E";
+  for (size_t at = name.find(lrm); at != std::string::npos; at = name.find(lrm)) {
+    name.erase(at, lrm.size());
+  }
+  return ofToString(device.id) + ": " + name;
+}
+
+// 系統ごとに、認識したカメラを1台ずつトグルにする (起動時のカメラ一覧)。
+void ofApp::setupCameraChoices() {
+  cameraChoiceListeners.unsubscribeAll();
+  const char *groupNames[2] = {"Camera 1 (Upper)", "Camera 2 (Lower)"};
+  for (int input = 0; input < 2; ++input) {
+    cameraChoiceGroups[input].clear();
+    cameraChoiceGroups[input].setName(groupNames[input]);
+    cameraChoices[input].clear();
+    for (size_t device = 0; device < cameraDevices.size(); ++device) {
+      ofParameter<bool> choice;
+      choice.set(cameraDisplayName(cameraDevices[device]), false);
+      cameraChoices[input].push_back(choice);
+      cameraChoiceGroups[input].add(cameraChoices[input].back());
+      cameraChoiceListeners.push(cameraChoices[input].back().newListener(
+          [this, input, device](bool &value) {
+            onCameraChoiceChanged(input, static_cast<int>(device), value);
+          }));
     }
+  }
+  syncCameraChoices();
+}
+
+// 現在のカメラIDに合わせて、トグルのチェックを付け直す。
+void ofApp::syncCameraChoices() {
+  const int selected[2] = {pCameraIndex.get(), pCamera2Index.get()};
+  for (int input = 0; input < 2; ++input) {
+    for (size_t device = 0; device < cameraChoices[input].size(); ++device) {
+      cameraChoices[input][device].setWithoutEventNotifications(
+          static_cast<int>(device) == selected[input]);
+    }
+  }
+}
+
+void ofApp::onCameraChoiceChanged(int input, int device, bool value) {
+  // 選択中のものを外した場合は、そのまま選択状態に戻す (必ず1台選ばれている)。
+  ofParameter<int> &index = input == 0 ? pCameraIndex : pCamera2Index;
+  if (!value || index.get() == device) {
+    syncCameraChoices();
+    return;
+  }
+  index = device; // onCameraIndexChanged / onCamera2IndexChanged が開き直す
+}
+
+// 選択に合わせてカメラを開き直す。変わった系統だけを閉じてから開く
+// (2系統で機器を入れ替える場合に、同じ機器を二重に開かないため)。
+void ofApp::applyCameraSelection() {
+  int wanted[2] = {-1, -1};
+  if (realtimeMode && !cameraDevices.empty()) {
+    wanted[0] = pCameraIndex.get();
+    if (dualOutputActive() && pCamera2Index.get() != wanted[0]) {
+      wanted[1] = pCamera2Index.get();
+    }
+  }
+  ofVideoGrabber *grabbers[2] = {&cam, &cam2};
+  bool changed[2] = {false, false};
+  for (int i = 0; i < 2; ++i) {
+    if (openedCameraDevice[i] == wanted[i]) continue;
+    changed[i] = true;
+    if (i == 1 && detectionFuture2.valid()) {
+      takeDetectionResult(detectionFuture2, humanData2, false);
+    }
+    grabbers[i]->close();
+    openedCameraDevice[i] = -1;
+  }
+  for (int i = 0; i < 2; ++i) {
+    if (!changed[i] || wanted[i] < 0) continue;
+    grabbers[i]->setDeviceID(wanted[i]);
+    grabbers[i]->setup(W, H); // W, H は ofApp.h で定義されている解像度
+    openedCameraDevice[i] = wanted[i];
+    ofLogNotice() << "Camera " << (i + 1) << " -> device " << wanted[i] << ": "
+                  << cameraDevices[wanted[i]].deviceName;
+  }
+  if (realtimeMode && dualOutputActive() && wanted[1] < 0 && changed[1]) {
+    ofLogNotice() << "Camera 2 shares Camera 1 (same device)";
+  }
 }
 
 //--------------------------------------------------------------
@@ -1858,6 +2002,10 @@ void ofApp::onFlipHorizontalChanged(bool &value) {
 
 //--------------------------------------------------------------
 void ofApp::update() {
+  if (guiRebuildPending) {
+    guiRebuildPending = false;
+    rebuildGuiPanel();
+  }
   // MOV生成はバックグラウンドで進め、完了だけをMainスレッドで反映する。
   if (isExportingMovie) {
     updateMovieExport();
@@ -1876,55 +2024,83 @@ void ofApp::update() {
     // YOLO推論を別スレッドで実行し、完了した結果をメインスレッドで反映する。
     // ============================================
     cam.update();
+    const bool camera2Shared = openedCameraDevice[1] < 0;
+    if (!camera2Shared) cam2.update();
 
-    if (detectionFuture.valid() &&
-        detectionFuture.wait_for(std::chrono::milliseconds(0)) ==
-            std::future_status::ready) {
-      finishRealtimeDetection(true);
+    if (isFutureReady(detectionFuture)) {
+      takeDetectionResult(detectionFuture, humanData, true);
+    }
+    if (isFutureReady(detectionFuture2)) {
+      takeDetectionResult(detectionFuture2, humanData2, true);
+    }
+    // 推論していない間に、系統1の検出設定を系統2へ写す。
+    syncSecondPipelineSettings();
+
+    const int outW = mainCanvasWidth();
+    const int outH = mainCanvasHeight();
+    // 同じセッションに同時にアクセスしないよう、系統ごとに
+    // 前の推論が終わるまで新しいフレームの推論を起動しない。
+    const uint64_t now = ofGetElapsedTimeMillis();
+    const uint64_t intervalMs = 1000 / std::max(1, pMainWindowTargetFps.get());
+    const auto due = [&](const std::future<HumanContourData> &future,
+                         const PersonSegmenter &segmenter, uint64_t lastMs) {
+      return segmenter.isLoaded() && !future.valid() &&
+             (lastMs == 0 || now - lastMs >= intervalMs);
+    };
+    // 新しいフレームをプレビュー用バッファへ取り込む (左右反転はプレビューと推論の両方へ)。
+    const auto takeFrame = [&](ofVideoGrabber &grabber, ofxCvColorImage &image) {
+      if (!grabber.isFrameNew()) return false;
+      const ofPixels &pixels = grabber.getPixels();
+      if (pixels.getWidth() <= 0 || pixels.getHeight() <= 0) return false;
+      image.setFromPixels(pixels);
+      if (pFlipHorizontal) image.mirror(false, true);
+      return true;
+    };
+    // カメラの画素バッファは次の更新で変わるため、推論用に切り抜いて複製する。
+    const auto cropForDetection = [&](ofxCvColorImage &image) {
+      const int frameW = image.getWidth();
+      const int frameH = image.getHeight();
+      const cv::Rect crop = sourceCrop(frameW, frameH, outW, outH,
+                                        cropPositionX, cropPositionY);
+      if (crop.empty()) return cv::Mat();
+      return cv::Mat(frameH, frameW, CV_8UC3, image.getPixels().getData())(crop).clone();
+    };
+    const auto launch2 = [&](const cv::Mat &frame) {
+      detectionFuture2 = std::async(
+          std::launch::async,
+          [this, frame, outW, outH]() -> HumanContourData {
+            return personSegmenter2.detect(frame, outW, outH);
+          });
+      lastRealtimeProcessMs2 = now;
+    };
+
+    // カメラ1 (共有中はカメラ2の推論もこのフレームで行う)
+    if (takeFrame(cam, colorImg)) {
+      const bool run1 = due(detectionFuture, personSegmenter, lastRealtimeProcessMs);
+      const bool run2 = dualOutputActive() && camera2Shared &&
+          due(detectionFuture2, personSegmenter2, lastRealtimeProcessMs2);
+      if (run1 || run2) {
+        // 2系統は同じ複製を読み取り専用で共有する。
+        const cv::Mat frame = cropForDetection(colorImg);
+        if (!frame.empty()) {
+          if (run1) {
+            detectionFuture = std::async(
+                std::launch::async,
+                [this, frame, outW, outH]() -> HumanContourData {
+                  return personSegmenter.detect(frame, outW, outH);
+                });
+            lastRealtimeProcessMs = now;
+          }
+          if (run2) launch2(frame);
+        }
+      }
     }
 
-    if (cam.isFrameNew()) {
-      const ofPixels &cameraPixels = cam.getPixels();
-      const int frameWidth = cameraPixels.getWidth();
-      const int frameHeight = cameraPixels.getHeight();
-      if (frameWidth <= 0 || frameHeight <= 0) {
-        return;
-      }
-
-      // カメラプレビューはAIモデルの読込成否に関係なく常に更新する。
-      colorImg.setFromPixels(cameraPixels);
-
-      // 左右反転はプレビューとAI推論の両方へ反映する。
-      if (pFlipHorizontal) {
-        colorImg.mirror(false, true);
-      }
-
-      // cv::dnn::Net に同時にアクセスしないよう、前の推論が終わるまで
-      // 新しいフレームの推論を起動しない。
-      const uint64_t now = ofGetElapsedTimeMillis();
-      const uint64_t intervalMs = 1000 / std::max(1, pMainWindowTargetFps.get());
-      if (personSegmenter.isLoaded() && !detectionFuture.valid() &&
-          (lastRealtimeProcessMs == 0 || now - lastRealtimeProcessMs >= intervalMs)) {
-
-        // カメラの画素バッファは次の更新で変わるため、推論用に複製する。
-        cv::Mat frame = cv::Mat(
-            frameHeight, frameWidth, CV_8UC3,
-            colorImg.getPixels().getData()).clone();
-
-        const int outW = mainCanvasWidth();
-        const int outH = mainCanvasHeight();
-        const cv::Rect crop = sourceCrop(frameWidth, frameHeight, outW, outH,
-                                          cropPositionX, cropPositionY);
-        if (crop.empty()) return;
-        frame = frame(crop).clone();
-
-        detectionFuture = std::async(
-            std::launch::async,
-            [this, frame = std::move(frame), outW, outH]() -> HumanContourData {
-              return personSegmenter.detect(frame, outW, outH);
-            });
-        lastRealtimeProcessMs = now;
-      }
+    // カメラ2 (カメラ1と別の機器を選んでいる時)
+    if (!camera2Shared && takeFrame(cam2, colorImg2) && dualOutputActive() &&
+        due(detectionFuture2, personSegmenter2, lastRealtimeProcessMs2)) {
+      const cv::Mat frame = cropForDetection(colorImg2);
+      if (!frame.empty()) launch2(frame);
     }
   } else {
     // ============================================
@@ -1946,6 +2122,7 @@ void ofApp::update() {
     const int canvasH = mainCanvasHeight();
     if (canvasW != lastSceneCanvasWidth || canvasH != lastSceneCanvasHeight) {
       humanGraphicsScene->setCanvasSize(canvasW, canvasH);
+      if (humanGraphicsScene2) humanGraphicsScene2->setCanvasSize(canvasW, canvasH);
       lastSceneCanvasWidth = canvasW;
       lastSceneCanvasHeight = canvasH;
     }
@@ -1956,6 +2133,9 @@ void ofApp::update() {
   if (currentScene) {
     const HumanContourData &activeData = realtimeMode ? humanData : videoProcessor.humanData;
     currentScene->update(activeData);
+  }
+  if (dualOutputActive() && humanGraphicsScene2) {
+    humanGraphicsScene2->update(humanData2);
   }
 
   // 人物グラフィックのシーンを表示している間だけ、音へ人物の情報を送る。
@@ -1971,6 +2151,11 @@ void ofApp::update() {
 void ofApp::draw() {
   // Exportボタンを押した後はMain Windowの通常描画を停止する。
   if (isExportingImageSequence) return;
+
+  if (dualOutputActive()) {
+    drawDualOutput();
+    return;
+  }
 
   // 現在のシーンのグラフィックを描画
   // (Realtimeでもオフラインでも、Scene側は同じ描画ロジックのまま)
@@ -2013,16 +2198,114 @@ ofRectangle ofApp::mainCanvasRect() const {
 }
 
 int ofApp::mainCanvasWidth() const {
+  // 2出力中は、ウィンドウの大きさに関係なく1段分の解像度で描く。
+  if (dualOutputActive()) return kDualBandWidth;
   return static_cast<int>(mainCanvasRect().width);
 }
 
 int ofApp::mainCanvasHeight() const {
+  if (dualOutputActive()) return kDualBandHeight;
   return static_cast<int>(mainCanvasRect().height);
 }
 
 //--------------------------------------------------------------
+void ofApp::syncSecondPipelineSettings() {
+  if (!humanGraphicsScene || !humanGraphicsScene2) return;
+  HumanGraphicsScene &a = *humanGraphicsScene;
+  HumanGraphicsScene &b = *humanGraphicsScene2;
+  b.enableBase = a.enableBase;
+  b.enableOffset = a.enableOffset;
+  b.enableStroke = a.enableStroke;
+  b.enableBridgeStroke = a.enableBridgeStroke;
+  b.enableMerge = a.enableMerge;
+  b.enableLooseContour = a.enableLooseContour;
+  b.looseContourStrength = a.looseContourStrength;
+  b.offsetSize = a.offsetSize;
+  b.offsetScale = a.offsetScale;
+  b.offsetJoinType = a.offsetJoinType;
+  b.strokeWeight = a.strokeWeight;
+  b.strokeJoinType = a.strokeJoinType;
+  b.baseMaterialType = a.baseMaterialType;
+  b.outlineMaterialType = a.outlineMaterialType;
+  b.paperShadow = a.paperShadow;
+  b.backgroundGradient = a.backgroundGradient;
+  if (b.renderRecipeId() != a.renderRecipeId()) {
+    b.setRenderRecipe(std::string(a.renderRecipeId()));
+  }
+  if (b.mergeEventId() != a.mergeEventId()) {
+    b.setMergeEvent(std::string(a.mergeEventId()));
+  }
+  if (b.sceneLayoutId() != a.sceneLayoutId()) {
+    b.setSceneLayout(std::string(a.sceneLayoutId()));
+  }
+  if (b.sceneBehaviorId() != a.sceneBehaviorId()) {
+    b.setSceneBehavior(std::string(a.sceneBehaviorId()));
+  }
+
+  // 推論中の値は書き換えない (別スレッドが読んでいるため)。
+  if (!detectionFuture2.valid()) {
+    personSegmenter2.yoloConfidenceThreshold = personSegmenter.yoloConfidenceThreshold;
+    personSegmenter2.aspectRatioPercent = personSegmenter.aspectRatioPercent;
+    personSegmenter2.nmsThreshold = personSegmenter.nmsThreshold;
+    personSegmenter2.personClassId = personSegmenter.personClassId;
+    personSegmenter2.maxDetections = personSegmenter.maxDetections;
+    personSegmenter2.minContourArea = personSegmenter.minContourArea;
+  }
+}
+
+//--------------------------------------------------------------
+void ofApp::allocateDualBandFbos() {
+  for (ofFbo &fbo : dualBandFbo) {
+    if (fbo.isAllocated()) continue;
+    ofFboSettings settings;
+    settings.width = kDualBandWidth;
+    settings.height = kDualBandHeight;
+    settings.internalformat = GL_RGBA;
+    settings.numSamples = 4; // Main Windowと同じくエッジを滑らかにする
+    fbo.allocate(settings);
+  }
+}
+
+//--------------------------------------------------------------
+// 各系統を3550x950のFBOへ描き、3840x2160のキャンバスへ上下2段で置く。
+// (Sceneは描画のたびに背景を塗るので、FBOに分けて互いに消さないようにする)
+// ウィンドウが4Kでない場合は、キャンバス全体を縮小して中央に表示する。
+void ofApp::drawDualOutput() {
+  allocateDualBandFbos();
+  const std::shared_ptr<HumanGraphicsScene> scenes[2] = {humanGraphicsScene,
+                                                         humanGraphicsScene2};
+  for (int i = 0; i < 2; ++i) {
+    dualBandFbo[i].begin();
+    ofClear(background_color, background_color, background_color, 255);
+    if (scenes[i]) scenes[i]->draw();
+    if (i == 0 && showDebug) drawDebug();
+    dualBandFbo[i].end();
+  }
+
+  const float windowW = static_cast<float>(
+      mainWindow ? mainWindow->getWidth() : ofGetWidth());
+  const float windowH = static_cast<float>(
+      mainWindow ? mainWindow->getHeight() : ofGetHeight());
+  const float scale = std::min(windowW / kDualCanvasWidth,
+                               windowH / kDualCanvasHeight);
+  const float offsetX = std::round((windowW - kDualCanvasWidth * scale) * 0.5f);
+  const float offsetY = std::round((windowH - kDualCanvasHeight * scale) * 0.5f);
+
+  ofBackground(0);
+  ofPushMatrix();
+  ofPushStyle();
+  ofTranslate(offsetX, offsetY);
+  ofScale(scale, scale);
+  ofSetColor(255);
+  dualBandFbo[0].draw(0, kDualUpperBandY);
+  dualBandFbo[1].draw(0, kDualLowerBandY);
+  ofPopStyle();
+  ofPopMatrix();
+}
+
+//--------------------------------------------------------------
 void ofApp::drawProjectionMargins() {
-  if (!pProjectionSafeArea.get()) return;
+  if (!pProjectionSafeArea.get() || dualOutputActive()) return;
   const float windowW = static_cast<float>(
       mainWindow ? mainWindow->getWidth() : ofGetWidth());
   const float windowH = static_cast<float>(
@@ -2061,6 +2344,23 @@ void ofApp::onProjectionSafeAreaChanged(bool &value) {
     finishRealtimeDetection(false);
     lastRealtimeProcessMs = 0;
   }
+  saveGuiSettings();
+}
+
+//--------------------------------------------------------------
+// 2画面モードの切り替え。カメラ2の開閉、描画サイズ、ウィンドウ比率を合わせ直す。
+void ofApp::onDualOutputChanged(bool &value) {
+  if (realtimeMode) {
+    finishRealtimeDetection(false);
+    lastRealtimeProcessMs = 0;
+    lastRealtimeProcessMs2 = 0;
+    humanData2 = HumanContourData();
+  }
+  applyCameraSelection();
+  applyMainWindowAspectLock();
+  // パネルの表示 (カメラ2の選択欄) を切り替える。クリック処理中にパネルを
+  // 作り直すと新しいトグルが反応しなくなるため、次の update() で作り直す。
+  guiRebuildPending = true;
   saveGuiSettings();
 }
 

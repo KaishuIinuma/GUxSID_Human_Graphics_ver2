@@ -112,7 +112,11 @@ void HumanGraphicsScene::draw(bool drawBackground) {
   if (!renderRecipe) return;
   const gux::RenderContext context = renderContext();
   // 紙の影は、紙と同じ Recipe で形を描いてから作る。どの Recipe でも同じように効く。
-  const auto drawPaper = [&] { renderRecipe->draw(sceneObjects, context); };
+  // 結ぶストロークはObject本体より前面に描き、紙の影にも含める。
+  const auto drawPaper = [&] {
+    renderRecipe->draw(sceneObjects, context);
+    if (enableBridgeStroke) bridgeStrokePass.draw(sceneObjects, context);
+  };
   paperShadowPass.draw(activeCanvasWidth(), activeCanvasHeight(), paperShadow,
                        drawPaper);
   drawPaper();
@@ -144,10 +148,6 @@ void HumanGraphicsScene::setRenderRecipe(const std::string& recipeId) {
   hasPipelineSignature = false;
   if (recipeId == gux::MixRenderRecipe::RecipeId) {
     renderRecipe = std::make_shared<gux::MixRenderRecipe>();
-    return;
-  }
-  if (recipeId == gux::FloatingBridgeRenderRecipe::RecipeId) {
-    renderRecipe = std::make_shared<gux::FloatingBridgeRenderRecipe>();
     return;
   }
 

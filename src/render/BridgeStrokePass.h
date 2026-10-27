@@ -1,8 +1,8 @@
 #pragma once
 
-#include "render/BasePass.h"
-#include "render/RenderRecipe.h"
-#include "render/StrokePass.h"
+#include "scene/SceneObject.h"
+#include "ofMain.h"
+#include "render/RenderContext.h"
 
 #include <algorithm>
 #include <cmath>
@@ -12,42 +12,16 @@ namespace gux {
 
 // 画面内の全Objectの重心を、1本のストロークで結ぶ。
 // 結ぶ順番は左下端から右へ進み、X座標が戻らない順(X昇順、同じXなら下から)にする。
-// Object本体の描画は通常のRecipeと同じく、Base/Strokeトグルの設定に従う。
-class FloatingBridgeRenderRecipe final : public RenderRecipe {
+// どのRecipeの上にも重ねられるよう、Object本体の描画とは独立している。
+class BridgeStrokePass {
  public:
-  static constexpr std::string_view RecipeId = "floating_bridge_render";
-  std::string_view id() const override { return RecipeId; }
-
   void draw(const std::vector<SceneObject>& objects,
-            const RenderContext& context) const override {
-    for (const auto& object : objects) {
-      if (object.geometry.size() < 3) continue;
-      ofPushMatrix();
-      ofTranslate(object.pivot + object.transform.position);
-      ofRotateDeg(object.transform.rotationDegrees);
-      ofScale(object.transform.scale.x, object.transform.scale.y);
-      ofTranslate(-object.pivot);
-      if (context.enableBase) basePass.draw(object, context);
-      if (context.enableStroke) strokePass.draw(object, context);
-      ofPopMatrix();
-    }
-
-    // 接続線はObject本体より前面に描く。
-    drawConnection(objects, context);
-  }
-
- private:
-  static glm::vec2 worldCenter(const SceneObject& object) {
-    return object.pivot + object.transform.position;
-  }
-
-  void drawConnection(const std::vector<SceneObject>& objects,
-                      const RenderContext& context) const {
+            const RenderContext& context) const {
     std::vector<glm::vec2> points;
     points.reserve(objects.size());
     for (const auto& object : objects) {
       if (object.geometry.size() < 3) continue;
-      points.push_back(worldCenter(object));
+      points.push_back(object.pivot + object.transform.position);
     }
     if (points.size() < 2) return;
 
@@ -62,6 +36,7 @@ class FloatingBridgeRenderRecipe final : public RenderRecipe {
     drawOpenStroke(points, ofColor(100, 100, 100), weight);
   }
 
+ private:
   // 始点と終点をつながない、角を丸めた1本のストロークを描く。
   static void drawOpenStroke(const std::vector<glm::vec2>& points,
                              const ofColor& color, float weight) {
@@ -102,9 +77,6 @@ class FloatingBridgeRenderRecipe final : public RenderRecipe {
     mesh.draw();
     ofPopStyle();
   }
-
-  BasePass basePass;
-  StrokePass strokePass;
 };
 
 }  // namespace gux

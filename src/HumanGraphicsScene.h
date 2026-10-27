@@ -8,7 +8,7 @@
 #include "render/BackgroundGradientPass.h"
 #include "render/MixRenderRecipe.h"
 #include "render/PaperShadowPass.h"
-#include "render/FloatingBridgeRenderRecipe.h"
+#include "render/BridgeStrokePass.h"
 #include "render/StandardRenderRecipe.h"
 #include "scene/SceneComposer.h"
 #include "scene/StandardSceneBehavior.h"
@@ -48,6 +48,7 @@ class HumanGraphicsScene : public BaseScene {
   bool enableBase = true;
   bool enableOffset = true;
   bool enableStroke = true;
+  bool enableBridgeStroke = false;  // 全Objectの重心を結ぶストローク
   bool enableMerge = true;
   bool enableLooseContour = false;
   float looseContourStrength = 7.0f;
@@ -74,6 +75,7 @@ class HumanGraphicsScene : public BaseScene {
   std::shared_ptr<gux::SceneLayout> sceneLayout;
   std::shared_ptr<gux::SceneBehavior> sceneBehavior;
   gux::PaperShadowPass paperShadowPass;
+  gux::BridgeStrokePass bridgeStrokePass;
   gux::BackgroundGradientPass backgroundGradientPass;
   float backgroundSeconds = 0.0f;  // 背景のにじみが漂う時間（書き出しでは動画の時間）
 
