@@ -1,6 +1,7 @@
 #include "PersonSegmenter.h"
 #include <opencv2/imgproc.hpp>
 #include <algorithm>
+#include <chrono>
 #include <climits>
 #include <cmath>
 #include <cstdlib>
@@ -38,7 +39,16 @@ public:
         const std::string cache = cachePath.string();
         std::vector<const char *> keys = {"ModelFormat", "MLComputeUnits",
                                           "RequireStaticInputShapes", "ModelCacheDirectory"};
-        std::vector<const char *> values = {"MLProgram", "CPUAndGPU", "1",
+        // 計算デバイス: 既定はGPU。
+        // 環境変数 GUXSID_COREML_UNITS で切替可能
+        //   (CPUAndNeuralEngine / CPUAndGPU / ALL / CPUOnly)。
+        std::string computeUnits = "CPUAndGPU";
+        if (const char *units = std::getenv("GUXSID_COREML_UNITS");
+            units && *units) {
+          computeUnits = units;
+        }
+        ofLogNotice("PersonSegmenter") << "CoreML MLComputeUnits: " << computeUnits;
+        std::vector<const char *> values = {"MLProgram", computeUnits.c_str(), "1",
                                             cache.c_str()};
         // Opt in when validating operation placement on a particular Mac.
         if (const char *profile = std::getenv("GUXSID_COREML_PROFILE");
@@ -173,7 +183,7 @@ bool PersonSegmenter::loadModel(const std::string &modelPath, int inputSizeArg) 
   try {
     ortSession = std::make_unique<OrtYoloSession>(modelPath, inputSize);
     loaded = true;
-    ofLogNotice("PersonSegmenter") << "YOLO CoreML MLProgram (GPU) loaded: " << modelPath;
+    ofLogNotice("PersonSegmenter") << "YOLO CoreML MLProgram loaded: " << modelPath;
   } catch (const std::exception &e) {
     ofLogError("PersonSegmenter") << "YOLO CoreML load failed: " << e.what();
     ortSession.reset();
@@ -244,7 +254,23 @@ HumanContourData PersonSegmenter::detect(const cv::Mat &rgbFrame, int outputWidt
       cv::Scalar(0, 0, 0), false, false);
   std::vector<cv::Mat> outs;
   try {
+    const auto inferStart = std::chrono::steady_clock::now();
     outs = ortSession->run(blob);
+    // 計算デバイス比較用: 推論時間(ms)を約2秒ごとに平均してログ出力する。
+    static double inferSumMs = 0.0;
+    static int inferCount = 0;
+    static auto inferLogAt = std::chrono::steady_clock::now();
+    inferSumMs += std::chrono::duration<double, std::milli>(
+                      std::chrono::steady_clock::now() - inferStart).count();
+    ++inferCount;
+    if (std::chrono::steady_clock::now() - inferLogAt > std::chrono::seconds(2)) {
+      ofLogNotice("PersonSegmenter") << "YOLO inference avg: "
+                                     << (inferSumMs / inferCount) << " ms ("
+                                     << inferCount << " runs, input " << inputSize << ")";
+      inferSumMs = 0.0;
+      inferCount = 0;
+      inferLogAt = std::chrono::steady_clock::now();
+    }
   } catch (const std::exception &e) {
     ofLogError("PersonSegmenter") << "YOLO CoreML inference failed: " << e.what();
     return result;

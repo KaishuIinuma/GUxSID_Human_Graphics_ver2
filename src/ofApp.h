@@ -55,7 +55,7 @@ public:
   // 輪郭のリサンプリング頂点数（scene1〜4共通、GUI/キー操作で変更可能）
   static inline int vertexCount = 16;
 
-  static inline int background_color = 255;
+  static inline int background_color = 248;
 
   // HumanGraphicsSceneの人物グラフィック結合方法。
   // RenderedGraphic: 実際に描画するポリゴン／ストロークが接触した時だけ結合する。

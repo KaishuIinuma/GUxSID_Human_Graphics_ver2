@@ -610,11 +610,13 @@ dependencies: \
   src/core/VisualTypes.h src/geometry/LooseContourProcessor.h \
   src/geometry/OffsetProcessor.h src/geometry/VertexRemapper.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/material/MaterialAssignmentSystem.h \
+  /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/render/BackgroundGradientPass.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/render/MixRenderRecipe.h \
   src/render/BasePass.h src/render/RenderPass.h \
   src/render/RenderContext.h src/material/MaterialPainter.h \
   src/render/ShapePainter.h src/render/RenderRecipe.h \
   src/render/StrokePass.h \
+  /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/render/PaperShadowPass.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/render/FloatingBridgeRenderRecipe.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/render/StandardRenderRecipe.h \
   /Users/kaishu/Documents/OpenFrameWork/GUxSID_Human_Graphics_ver2/src/scene/SceneComposer.h \
