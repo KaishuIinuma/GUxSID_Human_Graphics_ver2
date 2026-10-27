@@ -2278,7 +2278,7 @@ void ofApp::drawDualOutput() {
     dualBandFbo[i].begin();
     ofClear(background_color, background_color, background_color, 255);
     if (scenes[i]) scenes[i]->draw();
-    if (i == 0 && showDebug) drawDebug();
+    if (showDebug) drawDebug(i);
     dualBandFbo[i].end();
   }
 
@@ -2365,8 +2365,22 @@ void ofApp::onDualOutputChanged(bool &value) {
 }
 
 //--------------------------------------------------------------
-void ofApp::drawDebug() {
+void ofApp::drawDebug(int band) {
   ofPushStyle();
+  // 既定の文字描画(BILLBOARD)はウィンドウの投影を前提に位置を計算するため、
+  // Dual Output の FBO 内では文字が反転したり範囲外に出たりする。
+  // 座標系どおりに描く MODEL モードにして、FBO 内でも正しく表示させる。
+  ofSetDrawBitmapMode(OF_BITMAPMODE_MODEL);
+  // Dual Output の下段はカメラ2の映像と検出結果を使う。
+  // カメラ2がカメラ1と同じ機器の時は、映像はカメラ1のものを共有している。
+  const bool lowerBand = band == 1 && dualOutputActive();
+  const bool camera2Shared = openedCameraDevice[1] < 0;
+  ofxCvColorImage &debugImg =
+      (lowerBand && !camera2Shared) ? colorImg2 : colorImg;
+  ofVideoGrabber &debugCam = (lowerBand && !camera2Shared) ? cam2 : cam;
+  const HumanContourData &debugData = lowerBand ? humanData2 : humanData;
+  PersonSegmenter &debugSegmenter =
+      lowerBand ? personSegmenter2 : personSegmenter;
   const int canvasWidth = mainCanvasWidth();
   const int canvasHeight = mainCanvasHeight();
   cv::Rect visibleCrop;
@@ -2383,33 +2397,33 @@ void ofApp::drawDebug() {
 
   if (realtimeMode) {
     // カメラ実写を表示
-    const cv::Rect crop = sourceCrop(colorImg.getWidth(), colorImg.getHeight(),
+    const cv::Rect crop = sourceCrop(debugImg.getWidth(), debugImg.getHeight(),
                                       canvasWidth, canvasHeight,
                                       cropPositionX, cropPositionY);
     if (!crop.empty()) {
       // ofxCvImage は通常 draw() 時に CPU 画素をテクスチャへ転送する。
       // drawSubsection() で直接描く場合は明示的な更新が必要。
-      colorImg.updateTexture();
-      colorImg.getTexture().drawSubsection(
+      debugImg.updateTexture();
+      debugImg.getTexture().drawSubsection(
           0, 0, canvasWidth, canvasHeight,
           crop.x, crop.y, crop.width, crop.height);
       visibleCrop = crop;
-      sourceTexture = &colorImg.getTexture();
-      sourceWidth = colorImg.getWidth();
-      sourceHeight = colorImg.getHeight();
+      sourceTexture = &debugImg.getTexture();
+      sourceWidth = debugImg.getWidth();
+      sourceHeight = debugImg.getHeight();
     }
 
     // ★変更: contourFinderのブロブではなく、
     //   PersonSegmenterが出したhumanData(人物ごとの輪郭)をオーバーレイする
     ofNoFill();
     ofSetLineWidth(4);
-    for (size_t i = 0; i < humanData.contours.size(); i++) {
+    for (size_t i = 0; i < debugData.contours.size(); i++) {
       ofSetColor(0, 255, 0);
-      humanData.contours[i].draw();
+      debugData.contours[i].draw();
 
-      if (i < humanData.boundingBoxes.size()) {
+      if (i < debugData.boundingBoxes.size()) {
         ofSetColor(255, 255, 0);
-        ofDrawRectangle(humanData.boundingBoxes[i]);
+        ofDrawRectangle(debugData.boundingBoxes[i]);
       }
     }
   } else {
@@ -2450,15 +2464,18 @@ void ofApp::drawDebug() {
   // ステータスと操作ガイド
   string info = "=== [DEBUG MODE] Person Detection ===\n";
   info += "Model: YOLO11-seg CoreML GPU\n";
-  const float activeThreshold = personSegmenter.yoloConfidenceThreshold;
+  const float activeThreshold = debugSegmenter.yoloConfidenceThreshold;
+  if (dualOutputActive()) {
+    info += "Band: " + string(lowerBand ? "Lower (Camera 2)" : "Upper (Camera 1)") + "\n";
+  }
   info += "Mode: " + string(realtimeMode ? "Realtime (Camera)" : "Video File") + "\n";
   if (realtimeMode) {
-    info += "Camera initialized: " + string(cam.isInitialized() ? "Yes" : "No") + "\n";
-    info += "Camera frame: " + ofToString(colorImg.getWidth()) + " x " +
-            ofToString(colorImg.getHeight()) + "\n";
-    info += "AI model loaded: " + string(personSegmenter.isLoaded() ? "Yes" : "No") + "\n";
-    info += "AI backend: " + personSegmenter.backendDescription() + "\n";
-    info += "Detected People: " + ofToString(humanData.numHumans) + "\n";
+    info += "Camera initialized: " + string(debugCam.isInitialized() ? "Yes" : "No") + "\n";
+    info += "Camera frame: " + ofToString(debugImg.getWidth()) + " x " +
+            ofToString(debugImg.getHeight()) + "\n";
+    info += "AI model loaded: " + string(debugSegmenter.isLoaded() ? "Yes" : "No") + "\n";
+    info += "AI backend: " + debugSegmenter.backendDescription() + "\n";
+    info += "Detected People: " + ofToString(debugData.numHumans) + "\n";
     info += "Threshold: " + ofToString(activeThreshold, 2) + "\n";
   } else {
     info += "Detected People: " + ofToString(videoProcessor.humanData.numHumans) + "\n";

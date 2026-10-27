@@ -39,7 +39,8 @@ public:
   void onGuiWindowKeyPressed(ofKeyEventArgs &args);
 
   // デバッグ描画用関数
-  void drawDebug();
+  // band: Dual Output 時の段 (0 = 上段/カメラ1, 1 = 下段/カメラ2)
+  void drawDebug(int band = 0);
 
   // color pallate
   //  ★修正: static を付けることで、インスタンスなしに
