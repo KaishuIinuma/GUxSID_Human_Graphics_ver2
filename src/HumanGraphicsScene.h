@@ -41,6 +41,20 @@ class HumanGraphicsScene : public BaseScene {
 
   // 音の送信用。人ごとの位置・面積と、合体グループを返す（キャンバスのピクセル単位）。
   const std::vector<gux::SoundPerson>& soundPeople() const { return soundPeopleList; }
+  // 結ぶストローク用の重心(このSceneのキャンバス座標)。
+  std::vector<glm::vec2> bridgeStrokePoints() const {
+    return gux::BridgeStrokePass::centroids(sceneObjects);
+  }
+  // 結ぶストロークで結ぶ点を外から指定する(Dual Outputで2画面をつなげる用)。
+  // clear するまで、自分の重心の代わりにこの点を結ぶ。
+  void setBridgeStrokeOverride(std::vector<glm::vec2> points) {
+    bridgeStrokeOverride = std::move(points);
+    hasBridgeStrokeOverride = true;
+  }
+  void clearBridgeStrokeOverride() {
+    bridgeStrokeOverride.clear();
+    hasBridgeStrokeOverride = false;
+  }
   glm::vec2 canvasSize() const {
     return glm::vec2(activeCanvasWidth(), activeCanvasHeight());
   }
@@ -76,6 +90,8 @@ class HumanGraphicsScene : public BaseScene {
   std::shared_ptr<gux::SceneBehavior> sceneBehavior;
   gux::PaperShadowPass paperShadowPass;
   gux::BridgeStrokePass bridgeStrokePass;
+  std::vector<glm::vec2> bridgeStrokeOverride;
+  bool hasBridgeStrokeOverride = false;
   gux::BackgroundGradientPass backgroundGradientPass;
   float backgroundSeconds = 0.0f;  // 背景のにじみが漂う時間（書き出しでは動画の時間）
 

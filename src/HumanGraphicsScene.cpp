@@ -115,7 +115,13 @@ void HumanGraphicsScene::draw(bool drawBackground) {
   // 結ぶストロークはObject本体より前面に描き、紙の影にも含める。
   const auto drawPaper = [&] {
     renderRecipe->draw(sceneObjects, context);
-    if (enableBridgeStroke) bridgeStrokePass.draw(sceneObjects, context);
+    if (enableBridgeStroke) {
+      if (hasBridgeStrokeOverride) {
+        bridgeStrokePass.draw(bridgeStrokeOverride, context);
+      } else {
+        bridgeStrokePass.draw(sceneObjects, context);
+      }
+    }
   };
   paperShadowPass.draw(activeCanvasWidth(), activeCanvasHeight(), paperShadow,
                        drawPaper);

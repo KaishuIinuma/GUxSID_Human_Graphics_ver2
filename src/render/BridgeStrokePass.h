@@ -15,14 +15,26 @@ namespace gux {
 // どのRecipeの上にも重ねられるよう、Object本体の描画とは独立している。
 class BridgeStrokePass {
  public:
-  void draw(const std::vector<SceneObject>& objects,
-            const RenderContext& context) const {
+  // 結ぶ対象になる重心を集める(並べ替えはしない)。
+  static std::vector<glm::vec2> centroids(
+      const std::vector<SceneObject>& objects) {
     std::vector<glm::vec2> points;
     points.reserve(objects.size());
     for (const auto& object : objects) {
       if (object.geometry.size() < 3) continue;
       points.push_back(object.pivot + object.transform.position);
     }
+    return points;
+  }
+
+  void draw(const std::vector<SceneObject>& objects,
+            const RenderContext& context) const {
+    draw(centroids(objects), context);
+  }
+
+  // 重心を直接渡して結ぶ。Dual Output で2画面を1本につなげる時に使う
+  // (画面外の点も含めてよい。はみ出した部分は描画先で切れる)。
+  void draw(std::vector<glm::vec2> points, const RenderContext& context) const {
     if (points.size() < 2) return;
 
     // 左から右へ。Xが同じ場合は下(画面座標でYが大きい方)から結ぶ。

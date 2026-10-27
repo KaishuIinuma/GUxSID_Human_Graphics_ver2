@@ -116,6 +116,28 @@ void configureBundledDataPath() {
 #endif
 }
 
+// 黒背景つきの文字表示。ofDrawBitmapStringHighlight は MODEL モードだと
+// 背景を上下反転して描いてしまうため、背景の矩形を自前で描く。
+// (寸法は ofDrawBitmapStringHighlight と同じ: 1文字 8px、行間 1.7、余白 4px)
+void drawTextWithBackground(const std::string &text, float x, float y) {
+  const std::vector<std::string> lines = ofSplitString(text, "\n");
+  size_t maxLineLength = 0;
+  for (const std::string &line : lines) {
+    maxLineLength = std::max(maxLineLength, line.size());
+  }
+  const float padding = 4.0f;
+  const float fontSize = 8.0f;
+  const float width = maxLineLength * fontSize + 2.0f * padding;
+  const float height = lines.size() * fontSize * 1.7f - 1.0f + 2.0f * padding;
+  ofPushStyle();
+  ofFill();
+  ofSetColor(0);
+  ofDrawRectangle(x - padding, y - (padding + fontSize + 2.0f), width, height);
+  ofSetColor(255);
+  ofDrawBitmapString(text, x, y);
+  ofPopStyle();
+}
+
 void drawSourceCropOverview(const ofTexture &texture, int sourceWidth,
                             int sourceHeight, const cv::Rect &crop,
                             int canvasWidth, int canvasHeight) {
@@ -146,8 +168,7 @@ void drawSourceCropOverview(const ofTexture &texture, int sourceWidth,
   ofDrawRectangle(imageX + crop.x * scale, imageY + crop.y * scale,
                   crop.width * scale, crop.height * scale);
   ofSetColor(255);
-  ofDrawBitmapStringHighlight("SOURCE / CYAN: VISIBLE CROP", imageX,
-                              imageY - 8.0f);
+  drawTextWithBackground("SOURCE / CYAN: VISIBLE CROP", imageX, imageY - 8.0f);
   ofPopStyle();
 }
 // 推論スレッドの結果を受け取る。applyResult=falseなら完了を待って捨てる。
@@ -2274,12 +2295,33 @@ void ofApp::drawDualOutput() {
   allocateDualBandFbos();
   const std::shared_ptr<HumanGraphicsScene> scenes[2] = {humanGraphicsScene,
                                                          humanGraphicsScene2};
+  // 結ぶストロークは、上段の右端と下段の左端が接した1本の横長画面として結ぶ。
+  // 両段の重心を下段だけ右へ1段分ずらして集め、各段にはその段の座標で渡す。
+  // 段の外へ出る部分は FBO の端で切れるので、境目でつながって見える。
+  const bool joinBridge = scenes[0] && scenes[1] &&
+                          scenes[0]->enableBridgeStroke &&
+                          scenes[1]->enableBridgeStroke;
+  if (joinBridge) {
+    const float bandOffset = static_cast<float>(kDualBandWidth);
+    std::vector<glm::vec2> joined = scenes[0]->bridgeStrokePoints();
+    for (const glm::vec2 &p : scenes[1]->bridgeStrokePoints()) {
+      joined.push_back(p + glm::vec2(bandOffset, 0.0f));
+    }
+    std::vector<glm::vec2> lower = joined;
+    for (glm::vec2 &p : lower) p.x -= bandOffset;
+    scenes[0]->setBridgeStrokeOverride(std::move(joined));
+    scenes[1]->setBridgeStrokeOverride(std::move(lower));
+  }
   for (int i = 0; i < 2; ++i) {
     dualBandFbo[i].begin();
     ofClear(background_color, background_color, background_color, 255);
     if (scenes[i]) scenes[i]->draw();
     if (showDebug) drawDebug(i);
     dualBandFbo[i].end();
+  }
+  if (joinBridge) {
+    scenes[0]->clearBridgeStrokeOverride();
+    scenes[1]->clearBridgeStrokeOverride();
   }
 
   const float windowW = static_cast<float>(
@@ -2501,7 +2543,7 @@ void ofApp::drawDebug(int band) {
   }
   info += "Press 'D' to CLOSE this debug overlay.";
 
-  ofDrawBitmapStringHighlight(info, 20, 25);
+  drawTextWithBackground(info, 20, 25);
 
   ofPopStyle();
 }
