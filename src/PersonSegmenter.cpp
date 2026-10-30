@@ -436,10 +436,6 @@ HumanContourData PersonSegmenter::detect(const cv::Mat &rgbFrame, int outputWidt
     cv::Mat maskLowRes = coefMat * protoMat;      // [1, protoH*protoW]
     maskLowRes = maskLowRes.reshape(1, protoH);   // [protoH, protoW]
 
-    cv::Mat maskUpsampled;
-    cv::resize(maskLowRes, maskUpsampled, cv::Size(inputSize, inputSize),
-               0.0, 0.0, cv::INTER_LINEAR);
-
     // crop_maskと同様に、x1 <= x < x2 / y1 <= y < y2 の整数画素を残す。
     const int left = std::clamp(static_cast<int>(std::ceil(det.box.x)), 0, inputSize);
     const int top = std::clamp(static_cast<int>(std::ceil(det.box.y)), 0, inputSize);
@@ -448,15 +444,40 @@ HumanContourData PersonSegmenter::detect(const cv::Mat &rgbFrame, int outputWidt
     const int bottom = std::clamp(
         static_cast<int>(std::ceil(det.box.y + det.box.height)), 0, inputSize);
     if (right <= left || bottom <= top) continue;
+    const int boxW = right - left;
+    const int boxH = bottom - top;
 
-    cv::Mat maskBinary = cv::Mat::zeros(inputSize, inputSize, CV_8UC1);
-    const cv::Rect maskBox(left, top, right - left, bottom - top);
-    cv::compare(maskUpsampled(maskBox), cv::Scalar(0.0),
-                maskBinary(maskBox), cv::CMP_GT);
+    // 640x640全体ではなく、人の範囲（と補間に使う周囲1画素）だけを拡大する。
+    // 拡大率が整数（160->640なら4倍）なら、線形補間の結果は全体を拡大した時と同じになる。
+    cv::Mat boxLogits;  // 入力空間での box 範囲の logit
+    const int factor = protoW > 0 ? inputSize / protoW : 0;
+    if (factor > 0 && protoW * factor == inputSize && protoH * factor == inputSize) {
+      const int lowX0 = std::max(0, left / factor - 1);
+      const int lowY0 = std::max(0, top / factor - 1);
+      const int lowX1 = std::min(protoW, (right + factor - 1) / factor + 1);
+      const int lowY1 = std::min(protoH, (bottom + factor - 1) / factor + 1);
+      const cv::Rect lowRect(lowX0, lowY0, lowX1 - lowX0, lowY1 - lowY0);
+      cv::Mat upsampled;
+      cv::resize(maskLowRes(lowRect), upsampled,
+                 cv::Size(lowRect.width * factor, lowRect.height * factor),
+                 0.0, 0.0, cv::INTER_LINEAR);
+      boxLogits = upsampled(cv::Rect(left - lowX0 * factor, top - lowY0 * factor,
+                                     boxW, boxH));
+    } else {
+      cv::Mat upsampled;
+      cv::resize(maskLowRes, upsampled, cv::Size(inputSize, inputSize),
+                 0.0, 0.0, cv::INTER_LINEAR);
+      boxLogits = upsampled(cv::Rect(left, top, boxW, boxH));
+    }
+
+    // 外周に1画素の余白を付けて二値化し、輪郭の座標は入力空間へ戻す。
+    cv::Mat maskBinary = cv::Mat::zeros(boxH + 2, boxW + 2, CV_8UC1);
+    cv::compare(boxLogits, cv::Scalar(0.0),
+                maskBinary(cv::Rect(1, 1, boxW, boxH)), cv::CMP_GT);
 
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(maskBinary, contours, cv::RETR_EXTERNAL,
-                     cv::CHAIN_APPROX_SIMPLE);
+                     cv::CHAIN_APPROX_SIMPLE, cv::Point(left - 1, top - 1));
     if (contours.empty()) continue;
 
     // 描画側の1検出=1輪郭という契約に合わせ、最大の連結成分を採用する。

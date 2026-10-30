@@ -3,6 +3,9 @@
 #include "scene/SceneObject.h"
 
 #include <algorithm>
+#include <limits>
+#include <unordered_map>
+#include <vector>
 
 namespace gux {
 
@@ -45,91 +48,109 @@ class MaterialAssignmentSystem {
       return;
     }
 
-    const bool objectCountChanged =
-        assignedAppearances.size() != objects.size();
+    const bool objectCountChanged = objects.size() != lastObjectCount;
     const bool materialTypeChanged =
         baseMaterialType != lastBaseMaterialType ||
         outlineMaterialType != lastOutlineMaterialType;
     // Color Update Intervalの最大値(20s)では時間経過による再抽選をしない。
     // 初回割り当てや人数・Material種別の変更には引き続き対応する。
     const bool updateDue = updateIntervalMs < 20000 && now >= nextUpdateMs;
-    const bool shouldReassign =
+    const bool reassignAll =
         objectCountChanged || materialTypeChanged || updateDue;
 
-    // SceneObjectは輪郭更新のたびに再生成されるため、再抽選しないフレームでも
-    // 前回のAppearanceを戻す。IDの揺れでは色を更新せず、従来どおり
-    // 人数変化または指定間隔の到達時だけ新しい色を割り当てる。
-    if (!shouldReassign) {
-      for (size_t i = 0; i < objects.size(); ++i) {
-        objects[i].appearance = assignedAppearances[i];
-      }
-      return;
-    }
-
     if (paletteSize == 0) {
-      assignedAppearances.clear();
+      assignedByKey.clear();
+      lastObjectCount = objects.size();
       nextUpdateMs = now + updateIntervalMs;
       return;
     }
     if (colorDeckPaletteSize != paletteSize) {
       colorDeck.clear();
       colorDeckPaletteSize = paletteSize;
+      assignedByKey.clear();
     }
 
-    assignedAppearances.resize(objects.size());
-    std::vector<size_t> assignedIndices;
-    assignedIndices.reserve(objects.size());
-    for (size_t i = 0; i < objects.size(); ++i) {
-      if (colorDeck.empty()) refillColorDeck(paletteSize);
-      auto colorIt = colorDeck.begin();
+    // 色はSceneObjectのIDごとに覚える。SceneObjectの並び順は検出の信頼度順で
+    // フレームごとに入れ替わるため、並び順で覚えると人どうしの色が入れ替わる。
+    // 人数変化または指定間隔の到達時だけ、全員の色を引き直す（従来どおり）。
+    if (reassignAll) assignedByKey.clear();
 
-      // 同一画面内では、パレットを一巡するまで重複を避ける。
-      // オブジェクト数がパレット数を超えた後は重複を許可する。
-      if (assignedIndices.size() < paletteSize) {
-        colorIt = std::find_if(
-            colorDeck.begin(), colorDeck.end(),
-            [&assignedIndices](size_t colorIndex) {
-              return std::find(assignedIndices.begin(), assignedIndices.end(),
-                               colorIndex) == assignedIndices.end();
-            });
-        if (colorIt == colorDeck.end()) {
-          refillColorDeck(paletteSize);
-          colorIt = std::find_if(
-              colorDeck.begin(), colorDeck.end(),
-              [&assignedIndices](size_t colorIndex) {
-                return std::find(assignedIndices.begin(), assignedIndices.end(),
-                                 colorIndex) == assignedIndices.end();
-              });
-        }
+    // 引き継いだ色を先に確定し、同じ画面で重ならないようにする。
+    std::vector<size_t> usedIndices;
+    usedIndices.reserve(objects.size());
+    for (const auto& object : objects) {
+      const auto found = assignedByKey.find(object.id);
+      if (found != assignedByKey.end()) usedIndices.push_back(found->second.paletteIndex);
+    }
+
+    std::unordered_map<ObjectId, Assigned> next;
+    next.reserve(objects.size());
+    for (auto& object : objects) {
+      auto found = assignedByKey.find(object.id);
+      if (found == assignedByKey.end()) {
+        // 新しく現れたID（またはTrackerのIDの付け直し）だけ新しい色を引く。
+        const size_t primaryIndex = drawColor(paletteSize, usedIndices);
+        usedIndices.push_back(primaryIndex);
+        // グラデーションの終点は次のパレット色を使う。開始色の重複なし契約は維持する。
+        const size_t secondaryIndex = (primaryIndex + 1) % paletteSize;
+        Assigned assigned;
+        assigned.paletteIndex = primaryIndex;
+        assigned.appearance.baseMaterial = {baseMaterialType, palette[primaryIndex],
+                                            palette[secondaryIndex], {0.0f, 1.0f}};
+        assigned.appearance.outlineMaterial = {outlineMaterialType, palette[primaryIndex],
+                                               palette[secondaryIndex], {0.0f, 1.0f}};
+        found = assignedByKey.emplace(object.id, assigned).first;
       }
-
-      const size_t primaryIndex = *colorIt;
-      assignedIndices.push_back(primaryIndex);
-      colorDeck.erase(colorIt);
-
-      // グラデーションの終点は次のパレット色を使う。開始色の重複なし契約は維持する。
-      const size_t secondaryIndex = (primaryIndex + 1) % paletteSize;
-      auto& appearance = objects[i].appearance;
-      appearance.baseMaterial = {baseMaterialType, palette[primaryIndex],
-                                 palette[secondaryIndex], {0.0f, 1.0f}};
-      appearance.outlineMaterial = {outlineMaterialType, palette[primaryIndex],
-                                    palette[secondaryIndex], {0.0f, 1.0f}};
-      assignedAppearances[i] = appearance;
+      object.appearance = found->second.appearance;
+      next[object.id] = found->second;
     }
+    // 画面から消えたIDは忘れる（覚え続けると増え続けるため）。
+    assignedByKey = std::move(next);
 
-    lastBaseMaterialType = baseMaterialType;
-    lastOutlineMaterialType = outlineMaterialType;
-    nextUpdateMs = now + updateIntervalMs;
+    lastObjectCount = objects.size();
+    if (reassignAll) {
+      lastBaseMaterialType = baseMaterialType;
+      lastOutlineMaterialType = outlineMaterialType;
+      nextUpdateMs = now + updateIntervalMs;
+    }
   }
 
   void reset() {
     colorDeck.clear();
-    assignedAppearances.clear();
+    assignedByKey.clear();
+    lastObjectCount = std::numeric_limits<size_t>::max();
     nextUpdateMs = 0;
     colorDeckPaletteSize = 0;
   }
 
  private:
+  struct Assigned {
+    AppearanceComponent appearance;
+    size_t paletteIndex = 0;
+  };
+
+  // 山札から1色引く。パレットを一巡するまでは、同じ画面で使用中の色を避ける。
+  // 使用中の色がパレット数以上になった後は重複を許可する。
+  size_t drawColor(size_t paletteSize, const std::vector<size_t>& usedIndices) {
+    if (colorDeck.empty()) refillColorDeck(paletteSize);
+    auto colorIt = colorDeck.begin();
+    if (usedIndices.size() < paletteSize) {
+      const auto unused = [&usedIndices](size_t colorIndex) {
+        return std::find(usedIndices.begin(), usedIndices.end(), colorIndex) ==
+               usedIndices.end();
+      };
+      colorIt = std::find_if(colorDeck.begin(), colorDeck.end(), unused);
+      if (colorIt == colorDeck.end()) {
+        refillColorDeck(paletteSize);
+        colorIt = std::find_if(colorDeck.begin(), colorDeck.end(), unused);
+        if (colorIt == colorDeck.end()) colorIt = colorDeck.begin();
+      }
+    }
+    const size_t index = *colorIt;
+    colorDeck.erase(colorIt);
+    return index;
+  }
+
   void refillColorDeck(size_t paletteSize) {
     colorDeck.resize(paletteSize);
     for (size_t i = 0; i < paletteSize; ++i) colorDeck[i] = i;
@@ -140,7 +161,8 @@ class MaterialAssignmentSystem {
   }
 
   std::vector<size_t> colorDeck;
-  std::vector<AppearanceComponent> assignedAppearances;
+  std::unordered_map<ObjectId, Assigned> assignedByKey;
+  size_t lastObjectCount = std::numeric_limits<size_t>::max();
   uint64_t nextUpdateMs = 0;
   size_t colorDeckPaletteSize = 0;
   MaterialType lastBaseMaterialType = MaterialType::Solid;

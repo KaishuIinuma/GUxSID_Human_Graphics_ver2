@@ -32,6 +32,8 @@ struct SoundPerson {
 // 割り当て、毎フレーム全スロットを送る。チャンネル数が増減しない。
 //   /gux/slot/0〜15  active x y size speed group
 //     active: 人がいれば1、いなければ0。いなくなった後も最後の位置を送り続ける。
+//     送信量が多い（毎フレーム16件）ため、setSlotMessagesEnabled(true) の時だけ送る。
+//     SfxPlayer は使っていない。TouchDesigner で使う時にオンにする。
 //
 // 出入り・合体などの出来事（OSC In DATのコールバック向け）:
 //   /gux/enter  id slot x y size     人が現れた
@@ -82,6 +84,9 @@ class SoundOscSender {
   }
 
   bool isEnabled() const { return enabled; }
+
+  // /gux/slot を送るかどうか。スロットの割り当て自体は、送らない時も続ける。
+  void setSlotMessagesEnabled(bool value) { slotMessagesEnabled = value; }
 
   void setTarget(const std::string& host, int port) {
     if (host == targetHost && port == targetPort && sender.isOpen()) return;
@@ -246,6 +251,7 @@ class SoundOscSender {
   std::string targetHost;
   int targetPort = 0;
   bool enabled = false;
+  bool slotMessagesEnabled = false;
   std::map<ObjectId, PersonState> states;
   std::map<Pair, PairState> pairs;
   std::array<SlotState, SlotCount> slots{};
@@ -387,6 +393,7 @@ class SoundOscSender {
         slots[i].used = false;
         slotFreedOrder[i] = ++freedCounter;
       }
+      if (!slotMessagesEnabled) continue;
       const SlotState& slot = slots[i];
       sender.send(OscMessage("/gux/slot/" + std::to_string(i))
                       .add(slot.active ? 1 : 0)

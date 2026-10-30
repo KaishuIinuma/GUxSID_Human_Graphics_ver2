@@ -229,8 +229,8 @@ void ofApp::setup() {
   // ============================================
   string modelPath = ofToDataPath("yolo11n-seg.onnx", true);
   bool modelOk = personSegmenter.loadModel(modelPath, 640);
-  // 系統2(下段)用。推論を並行して回すため、セッションを別に持つ。
-  personSegmenter2.loadModel(modelPath, 640);
+  // 系統2(下段)用のモデルは、Dual Output がオンの時だけ読み込む
+  // (loadSecondSegmenterIfNeeded。設定の読み込み後に呼ぶ)。
   if (!modelOk) {
     ofLogError() << "YOLOモデルの読み込みに失敗しました。data/に"
                      "yolo11n-seg.onnx を配置しているか確認してください: " << modelPath;
@@ -290,6 +290,8 @@ void ofApp::setupGuiParameters() {
   pCameraName.set("Camera Name", defaultCamName);
   // 仮の既定値: カメラ2もカメラ1と同じ機器 (共有) にする。
   pCamera2Index.set("Camera 2 ID", defaultCameraIndex, 0, maxCameraIndex);
+  pCameraKey.set("Camera Key", "");
+  pCamera2Key.set("Camera 2 Key", "");
   setupCameraChoices();
 
   discoverPresetFiles();
@@ -344,6 +346,7 @@ void ofApp::setupGuiParameters() {
   pBackgroundGradientSpeed.set("Background Gradient Speed", 1.0f, 0.0f, 4.0f);
   pExportAlpha.set("alpha", false);
   pSoundOscEnable.set("Sound OSC Out", true);
+  pSoundOscSlots.set("OSC Slots (TouchDesigner)", false);
   pSoundOscTarget.set("Sound OSC Target",
                       "127.0.0.1:" + ofToString(kSoundOscPort));
 
@@ -372,18 +375,21 @@ void ofApp::setupGuiParameters() {
   pBackgroundGradientDepth.addListener(this, &ofApp::onLookValueChanged);
   pBackgroundGradientSpeed.addListener(this, &ofApp::onLookValueChanged);
   pSoundOscEnable.addListener(this, &ofApp::onSoundOscEnableChanged);
+  pSoundOscSlots.addListener(this, &ofApp::onSoundOscSlotsChanged);
 
   pVideoStatusText.set("Video Status", "VideoモードでOpen Videoまたはドラッグから動画を読み込めます");
 
   // 表示状態にかかわらず、すべての操作可能なパラメータを保存対象にする。
   setupGuiPersistence();
   loadGuiSettings();
+  resolveSavedCameras();
 
   // 保存済みモードを先に確定し、Video起動時にカメラを開かないようにする。
   // ofParameterのリスナーはこの後で登録するため、ここでは明示的に反映する。
   realtimeMode = pRealtime.get();
   applyTargetFrameRate(pMainWindowTargetFps.get());
   soundOscSender.setTarget("127.0.0.1", kSoundOscPort);
+  soundOscSender.setSlotMessagesEnabled(pSoundOscSlots.get());
   soundOscSender.setEnabled(pSoundOscEnable.get());
   videoProcessor.processFps = static_cast<float>(pMainWindowTargetFps.get());
   personSegmenter.aspectRatioPercent = pAspectRatio.get();
@@ -391,6 +397,7 @@ void ofApp::setupGuiParameters() {
     bool enabled = true;
     onYoloInput320Changed(enabled);
   }
+  loadSecondSegmenterIfNeeded();
 
   pCameraIndex.addListener(this, &ofApp::onCameraIndexChanged);
   pCamera2Index.addListener(this, &ofApp::onCamera2IndexChanged);
@@ -435,7 +442,9 @@ void ofApp::setupGuiParameters() {
 
   // 保存済みの値を、GUI以外の実行状態にも反映する。
   int savedCameraIndex = pCameraIndex.get();
+  keepSavedCameraKeys = true;  // 起動時は保存済みのキーを上書きしない
   onCameraIndexChanged(savedCameraIndex);
+  keepSavedCameraKeys = false;
   personSegmenter.yoloConfidenceThreshold = pYoloConfidence.get();
   vertexCount = pVertexCount.get();
   colorUpdateIntervalMs = static_cast<uint64_t>(pColorUpdateIntervalSec.get() * 1000.0f);
@@ -477,6 +486,8 @@ void ofApp::setupGuiPersistence() {
   guiParams.add(pRealtime);
   guiParams.add(pCameraIndex);
   guiParams.add(pCamera2Index);
+  guiParams.add(pCameraKey);
+  guiParams.add(pCamera2Key);
   guiParams.add(pFlipHorizontal);
   guiParams.add(pProjectionSafeArea);
   guiParams.add(pDualOutput);
@@ -517,16 +528,18 @@ void ofApp::setupGuiPersistence() {
   guiParams.add(pMainWindowTargetFps);
   guiParams.add(pExportAlpha);
   guiParams.add(pSoundOscEnable);
+  guiParams.add(pSoundOscSlots);
 
   // プリセットは見た目・検出設定だけを変更し、現在の入力モード
   // （RealtimeかVideoか）は変更しない。root名はcontrols.jsonと同じにして、
   // 同じJSON形式のうち該当する項目だけを読み込めるようにする。
   presetParams.clear();
   presetParams.setName("ControlsSettings");
-  presetParams.add(pCameraIndex);
+  // カメラの選択とYOLOの入力サイズは機材側の設定なので、プリセットには含めない
+  // （読み込むとカメラが切り替わったり、モデルの読み直しで止まったりするため）。
+  // 以前に保存したプリセットにこの項目が残っていても、読み込み時は無視される。
   presetParams.add(pFlipHorizontal);
   presetParams.add(pYoloConfidence);
-  presetParams.add(pYoloInput320);
   presetParams.add(pVertexCount);
   presetParams.add(pGraphicsOffsetScale);
   presetParams.add(pAspectRatio);
@@ -584,9 +597,25 @@ void ofApp::loadGuiSettings() {
 }
 
 //--------------------------------------------------------------
+// 値が変わるたびに書くと、スライダーのドラッグ中に毎フレーム書き込んで
+// カクつくため、ここでは印だけ付け、最後の変更から少し待って update() でまとめて書く。
 void ofApp::saveGuiSettings() const {
   if (isLoadingGuiSettings) return;
+  guiSettingsDirty = true;
+  guiSettingsDirtySinceMs = ofGetElapsedTimeMillis();
+}
 
+void ofApp::flushGuiSettings(bool force) const {
+  if (!guiSettingsDirty) return;
+  if (!force &&
+      ofGetElapsedTimeMillis() - guiSettingsDirtySinceMs < kGuiSettingsSaveDelayMs) {
+    return;
+  }
+  guiSettingsDirty = false;
+  writeGuiSettings();
+}
+
+void ofApp::writeGuiSettings() const {
   const auto settingsDirectory = settingsDirectoryPath();
   ofDirectory::createDirectory(settingsDirectory, false, true);
 
@@ -603,6 +632,7 @@ void ofApp::exit() {
   finishRealtimeDetection(false);
   soundOscSender.stop();
   saveGuiSettings();
+  flushGuiSettings(true);
 }
 
 //--------------------------------------------------------------
@@ -892,6 +922,7 @@ void ofApp::rebuildGuiPanel() {
   gui.add<float>(pBackgroundGradientDepth);
   gui.add<float>(pBackgroundGradientSpeed);
   gui.add(pSoundOscEnable);
+  gui.add(pSoundOscSlots);
   gui.add(pSoundOscTarget);
 
   // 動画モード時のみUIを追加
@@ -955,6 +986,24 @@ void ofApp::finishRealtimeDetection(bool applyResult) {
 }
 
 //--------------------------------------------------------------
+// 系統2のモデルは Dual Output を使う時だけ必要なので、起動時には読まず、
+// オンの時に系統1と同じモデルを読み込む。
+void ofApp::loadSecondSegmenterIfNeeded() {
+  if (!pDualOutput.get()) return;
+  const bool use320 = pYoloInput320.get();
+  const std::string path =
+      ofToDataPath(use320 ? "yolo11n-seg-320.onnx" : "yolo11n-seg.onnx", true);
+  if (personSegmenter2.isLoaded() && secondSegmenterModelPath == path) return;
+  takeDetectionResult(detectionFuture2, humanData2, false);
+  secondSegmenterModelPath.clear();
+  if (personSegmenter2.loadModel(path, use320 ? 320 : 640)) {
+    secondSegmenterModelPath = path;
+  } else {
+    ofLogError("ofApp") << "Camera 2 YOLO model failed: " << path;
+  }
+}
+
+//--------------------------------------------------------------
 void ofApp::onExportAlphaChanged(bool &value) {
   saveGuiSettings();
 }
@@ -984,11 +1033,8 @@ void ofApp::onYoloInput320Changed(bool &value) {
     personSegmenter.loadModel(ofToDataPath("yolo11n-seg.onnx", true), 640);
     pYoloInput320.setWithoutEventNotifications(false);
   }
-  // 系統2も同じモデルに揃える。
-  personSegmenter2.loadModel(
-      ofToDataPath(pYoloInput320.get() ? "yolo11n-seg-320.onnx"
-                                       : "yolo11n-seg.onnx", true),
-      pYoloInput320.get() ? 320 : 640);
+  // 系統2も同じモデルに揃える (Dual Output がオフなら、オンにした時に読む)。
+  loadSecondSegmenterIfNeeded();
   humanData = HumanContourData();
   humanData2 = HumanContourData();
   lastRealtimeProcessMs2 = 0;
@@ -1140,6 +1186,10 @@ void ofApp::onGraphicsEnableBridgeStrokeChanged(bool &value) {
 }
 void ofApp::onSoundOscEnableChanged(bool &value) {
     soundOscSender.setEnabled(value);
+    saveGuiSettings();
+}
+void ofApp::onSoundOscSlotsChanged(bool &value) {
+    soundOscSender.setSlotMessagesEnabled(value);
     saveGuiSettings();
 }
 void ofApp::onGraphicsMergeEnableChanged(bool &value) {
@@ -1917,6 +1967,9 @@ void ofApp::onCameraIndexChanged(int &index) {
   if (index < 0 || index >= static_cast<int>(cameraDevices.size())) return;
   // カメラの名前表示を更新
   pCameraName = cameraDevices[index].deviceName;
+  if (!keepSavedCameraKeys || pCameraKey.get().empty()) {
+    pCameraKey = cameraKey(cameraDevices[index]);
+  }
   syncCameraChoices();
   applyCameraSelection();
   saveGuiSettings();
@@ -1924,6 +1977,7 @@ void ofApp::onCameraIndexChanged(int &index) {
 
 void ofApp::onCamera2IndexChanged(int &index) {
   if (index < 0 || index >= static_cast<int>(cameraDevices.size())) return;
+  pCamera2Key = cameraKey(cameraDevices[index]);
   syncCameraChoices();
   applyCameraSelection();
   saveGuiSettings();
@@ -1937,6 +1991,77 @@ std::string ofApp::cameraDisplayName(const ofVideoDevice &device) {
     name.erase(at, lrm.size());
   }
   return ofToString(device.id) + ": " + name;
+}
+
+// 機器の固有ID (AVFoundation の uniqueID = ofVideoDevice::serialID)。
+// 取れない環境では名前を使う。同じ型番2台でも uniqueID は別になる。
+std::string ofApp::cameraKey(const ofVideoDevice &device) {
+  if (!device.serialID.empty()) return "id:" + device.serialID;
+  std::string name = device.deviceName;
+  const std::string lrm = "\xE2\x80\x8E";
+  for (size_t at = name.find(lrm); at != std::string::npos; at = name.find(lrm)) {
+    name.erase(at, lrm.size());
+  }
+  return "name:" + name;
+}
+
+int ofApp::findCameraByKey(const std::string &key) const {
+  if (key.empty()) return -1;
+  for (size_t i = 0; i < cameraDevices.size(); ++i) {
+    if (cameraKey(cameraDevices[i]) == key) return static_cast<int>(i);
+  }
+  return -1;
+}
+
+// controls.json のキーから、今回の起動でのカメラ番号を決め直す。
+// (リスナー登録前に呼ぶので、ここでの set() ではカメラは開かない)
+//   - キーが見つかった      → その番号を使う
+//   - キーがあるが見つからない → カメラ1は内蔵カメラ、カメラ2はカメラ1と共有にする
+//                              (別のカメラ(iPhoneなど)を勝手に使わない)
+//   - キーが無い(古い設定)   → 保存済みの番号をそのまま使う(範囲外なら内蔵カメラ)
+void ofApp::resolveSavedCameras() {
+  for (size_t i = 0; i < cameraDevices.size(); ++i) {
+    ofLogNotice("ofApp") << "Camera " << i << " key: " << cameraKey(cameraDevices[i]);
+  }
+  if (cameraDevices.empty()) return;
+  const int count = static_cast<int>(cameraDevices.size());
+  const auto inRange = [count](int index) { return index >= 0 && index < count; };
+
+  int camera1 = pCameraIndex.get();
+  if (!pCameraKey.get().empty()) {
+    const int found = findCameraByKey(pCameraKey.get());
+    if (found >= 0) {
+      camera1 = found;
+    } else {
+      camera1 = getDefaultCameraIndex();
+      ofLogWarning("ofApp") << "保存したカメラ1が見つかりません (" << pCameraKey.get()
+                            << ")。内蔵カメラを使います。";
+    }
+  } else if (!inRange(camera1)) {
+    camera1 = getDefaultCameraIndex();
+  }
+
+  int camera2 = pCamera2Index.get();
+  if (!pCamera2Key.get().empty()) {
+    const int found = findCameraByKey(pCamera2Key.get());
+    if (found >= 0) {
+      camera2 = found;
+    } else {
+      camera2 = camera1;
+      ofLogWarning("ofApp") << "保存したカメラ2が見つかりません (" << pCamera2Key.get()
+                            << ")。カメラ1の映像を共有します。";
+    }
+  } else if (!inRange(camera2)) {
+    camera2 = camera1;
+  }
+
+  pCameraIndex.set(camera1);
+  pCamera2Index.set(camera2);
+  // 見つからなかったキーは書き換えない。本番機でカメラの接続が起動に
+  // 間に合わなかった場合でも、次の起動で元のカメラに戻れるようにする。
+  // (キーはControlsでカメラを選び直した時だけ更新する)
+  if (pCamera2Key.get().empty()) pCamera2Key = cameraKey(cameraDevices[camera2]);
+  syncCameraChoices();
 }
 
 // 系統ごとに、認識したカメラを1台ずつトグルにする (起動時のカメラ一覧)。
@@ -2023,6 +2148,7 @@ void ofApp::onFlipHorizontalChanged(bool &value) {
 
 //--------------------------------------------------------------
 void ofApp::update() {
+  flushGuiSettings(false);
   if (guiRebuildPending) {
     guiRebuildPending = false;
     rebuildGuiPanel();
@@ -2068,23 +2194,42 @@ void ofApp::update() {
       return segmenter.isLoaded() && !future.valid() &&
              (lastMs == 0 || now - lastMs >= intervalMs);
     };
-    // 新しいフレームをプレビュー用バッファへ取り込む (左右反転はプレビューと推論の両方へ)。
+    // 新しいフレームが来たかを調べる。プレビュー用バッファ (colorImg) への
+    // 全面コピーと左右反転は、デバッグ表示を出している時だけ行う。
     const auto takeFrame = [&](ofVideoGrabber &grabber, ofxCvColorImage &image) {
       if (!grabber.isFrameNew()) return false;
       const ofPixels &pixels = grabber.getPixels();
       if (pixels.getWidth() <= 0 || pixels.getHeight() <= 0) return false;
-      image.setFromPixels(pixels);
-      if (pFlipHorizontal) image.mirror(false, true);
+      if (showDebug) {
+        image.setFromPixels(pixels);
+        if (pFlipHorizontal) image.mirror(false, true);
+      }
       return true;
     };
     // カメラの画素バッファは次の更新で変わるため、推論用に切り抜いて複製する。
-    const auto cropForDetection = [&](ofxCvColorImage &image) {
-      const int frameW = image.getWidth();
-      const int frameH = image.getHeight();
-      const cv::Rect crop = sourceCrop(frameW, frameH, outW, outH,
-                                        cropPositionX, cropPositionY);
+    // カメラの画素から使う範囲だけを1回で切り出す (左右反転もその範囲だけ)。
+    const auto cropForDetection = [&](ofVideoGrabber &grabber) {
+      const ofPixels &pixels = grabber.getPixels();
+      const int frameW = static_cast<int>(pixels.getWidth());
+      const int frameH = static_cast<int>(pixels.getHeight());
+      if (frameW <= 0 || frameH <= 0 || pixels.getNumChannels() != 3) {
+        return cv::Mat();
+      }
+      // 切り抜き位置は反転後の画像に対するものなので、反転前の座標に直す。
+      cv::Rect crop = sourceCrop(frameW, frameH, outW, outH,
+                                 cropPositionX, cropPositionY);
       if (crop.empty()) return cv::Mat();
-      return cv::Mat(frameH, frameW, CV_8UC3, image.getPixels().getData())(crop).clone();
+      if (pFlipHorizontal) crop.x = frameW - crop.x - crop.width;
+      const cv::Mat source(frameH, frameW, CV_8UC3,
+                           const_cast<unsigned char *>(pixels.getData()),
+                           pixels.getBytesStride());
+      cv::Mat frame;
+      if (pFlipHorizontal) {
+        cv::flip(source(crop), frame, 1);  // 新しい画像に書き出すので複製を兼ねる
+      } else {
+        frame = source(crop).clone();
+      }
+      return frame;
     };
     const auto launch2 = [&](const cv::Mat &frame) {
       detectionFuture2 = std::async(
@@ -2102,7 +2247,7 @@ void ofApp::update() {
           due(detectionFuture2, personSegmenter2, lastRealtimeProcessMs2);
       if (run1 || run2) {
         // 2系統は同じ複製を読み取り専用で共有する。
-        const cv::Mat frame = cropForDetection(colorImg);
+        const cv::Mat frame = cropForDetection(cam);
         if (!frame.empty()) {
           if (run1) {
             detectionFuture = std::async(
@@ -2120,7 +2265,7 @@ void ofApp::update() {
     // カメラ2 (カメラ1と別の機器を選んでいる時)
     if (!camera2Shared && takeFrame(cam2, colorImg2) && dualOutputActive() &&
         due(detectionFuture2, personSegmenter2, lastRealtimeProcessMs2)) {
-      const cv::Mat frame = cropForDetection(colorImg2);
+      const cv::Mat frame = cropForDetection(cam2);
       if (!frame.empty()) launch2(frame);
     }
   } else {
@@ -2162,8 +2307,27 @@ void ofApp::update() {
   // 人物グラフィックのシーンを表示している間だけ、音へ人物の情報を送る。
   if (humanGraphicsScene && currentScene == humanGraphicsScene) {
     const glm::vec2 canvas = humanGraphicsScene->canvasSize();
-    soundOscSender.update(humanGraphicsScene->soundPeople(), canvas.x,
-                          canvas.y, ofGetElapsedTimef());
+    if (dualOutputActive() && humanGraphicsScene2) {
+      // Dual Outputでは2系統の人をまとめて送る。結ぶストロークと同じく、
+      // 上段(左の投影)の右端と下段(右の投影)の左端がつながった横長の1画面として扱い、
+      // 下段の人は1段分だけ右へずらす。x は 0〜0.5 が上段、0.5〜1 が下段になる。
+      // 2系統のTrackerはどちらもIDを1から振るため、下段のIDはずらして重ならないようにする。
+      // (ずらしたIDどうしは合体しないので、上段と下段の人がmerge扱いになることもない)
+      const float bandOffset = canvas.x;
+      dualSoundPeople = humanGraphicsScene->soundPeople();
+      for (gux::SoundPerson person : humanGraphicsScene2->soundPeople()) {
+        person.id += kSecondPipelineSoundIdOffset;
+        person.group += kSecondPipelineSoundIdOffset;
+        person.centroid.x += bandOffset;
+        for (glm::vec2 &vertex : person.vertices) vertex.x += bandOffset;
+        dualSoundPeople.push_back(std::move(person));
+      }
+      soundOscSender.update(dualSoundPeople, canvas.x * 2.0f, canvas.y,
+                            ofGetElapsedTimef());
+    } else {
+      soundOscSender.update(humanGraphicsScene->soundPeople(), canvas.x,
+                            canvas.y, ofGetElapsedTimef());
+    }
   }
 }
 
@@ -2398,6 +2562,7 @@ void ofApp::onDualOutputChanged(bool &value) {
     lastRealtimeProcessMs2 = 0;
     humanData2 = HumanContourData();
   }
+  loadSecondSegmenterIfNeeded();
   applyCameraSelection();
   applyMainWindowAspectLock();
   // パネルの表示 (カメラ2の選択欄) を切り替える。クリック処理中にパネルを
@@ -2505,7 +2670,7 @@ void ofApp::drawDebug(int band) {
 
   // ステータスと操作ガイド
   string info = "=== [DEBUG MODE] Person Detection ===\n";
-  info += "Model: YOLO11-seg CoreML GPU\n";
+  info += "Model: YOLO11-seg " + debugSegmenter.backendDescription() + "\n";
   const float activeThreshold = debugSegmenter.yoloConfidenceThreshold;
   if (dualOutputActive()) {
     info += "Band: " + string(lowerBand ? "Lower (Camera 2)" : "Upper (Camera 1)") + "\n";

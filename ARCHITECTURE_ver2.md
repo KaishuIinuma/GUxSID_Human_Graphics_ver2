@@ -82,7 +82,14 @@ the active Recipe through `Recipe_ID`. These two are the only Recipes; an
 unknown ID falls back to `standard_render`.
 
 Presets live in `bin/data/presets/` (`default`, `fill`, `mix_render`,
-`stroke_Poly`, `stroke_Round`).
+`stroke_Poly`, `stroke_Round`). Presets do not store the camera selection or
+`YOLO Input 320`; those are hardware settings kept only in `controls.json`, and
+old presets that still contain them load without changing them.
+
+`ObjectTracker` matches people by nearest centroid within 20% of the canvas
+height. A track that has not been seen for 1 second is dropped, even while the
+detection stays unchanged (for example, nobody in view), so an old ID is not
+reused for a different person.
 
 ## Person detection
 
@@ -170,6 +177,9 @@ The rest of the canvas is black. Each band is drawn into its own FBO (each
 Scene clears its background), then both are placed on the canvas, scaled to
 fit when the window is not 4K.
 
+- `personSegmenter2` loads its model only while `Dual Output` is on (at
+  startup if it was saved on, or when it is turned on), using the same model
+  as `personSegmenter`.
 - Cameras are chosen per input in Controls (one toggle per detected device).
   If both inputs choose the same device, camera 2 is not opened and shares
   camera 1's frames.
@@ -187,6 +197,14 @@ fit when the window is not 4K.
 
 ## Settings
 
+Cameras are saved by device key (`Camera Key` / `Camera 2 Key` in
+controls.json: the AVFoundation unique ID, or the name if none), not by index,
+because macOS camera indexes change with Continuity Camera (iPhone) and USB
+order. At startup the key is looked up again; if camera 1 is missing the
+built-in camera is used, and if camera 2 is missing it shares camera 1. A
+missing key is kept, so the camera is used again when it is connected at the
+next start.
+
 ver2 stores its GUI settings and crash marker under
 `Application Support/GUxSID_Human_Graphics_ver2`, independently from the
 original project.
@@ -197,7 +215,12 @@ original project.
 port 7400, fixed by `ofApp::kSoundOscPort`) while the human graphics scene is
 shown. It is header-only and needs no addon. Positions and size are
 normalized to 0–1 of the canvas; speed is canvas units per second. In Dual
-Output only pipeline 1 (upper band) is sent.
+Output both pipelines are sent as one wide screen, like the bridge stroke: the
+upper band is x 0–0.5 and the lower band is x 0.5–1 (canvas = two bands side by
+side, so `size` is relative to that doubled area). Lower-band person and group
+IDs are offset by 1000000 (`ofApp::kSecondPipelineSoundIdOffset`) so they never
+collide with upper-band IDs, and people in different bands never merge. The 16
+slots and 8 notes are shared by both bands.
 
 The receiver is the separate app **GUxSID_SfxPlayer**
 (https://github.com/KaishuIinuma/GUxSID_SfxPlayer). It plays effect sounds
@@ -208,7 +231,7 @@ does not need Logic or TouchDesigner. The earlier TouchDesigner setup remains in
 
 | Address | Arguments | When |
 |---|---|---|
-| `/gux/slot/0`…`/gux/slot/15` | active x y size speed group | every frame, all 16 slots (for OSC In CHOP) |
+| `/gux/slot/0`…`/gux/slot/15` | active x y size speed group | every frame, all 16 slots (for OSC In CHOP). Sent only when `OSC Slots (TouchDesigner)` is on in Controls (off by default; SfxPlayer does not use it) |
 | `/gux/enter` | id slot x y size | a person appears |
 | `/gux/exit` | id slot | a person has been missing for 0.4 s |
 | `/gux/person` | id x y size speed group | every frame, per person |

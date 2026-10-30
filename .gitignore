@@ -1,0 +1,4 @@
+# Xcode のビルド中間ファイル（ビルドのたびに作り直される）
+build/
+outputs/
+.DS_Store

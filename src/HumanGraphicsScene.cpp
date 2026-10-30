@@ -9,6 +9,9 @@
 
 namespace {
 
+// 人の対応付けに使う最大距離（画面の高さに対する割合）。
+constexpr float kTrackerMatchDistanceRatio = 0.2f;
+
 void hashCombine(uint64_t& seed, uint64_t value) {
   seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
 }
@@ -40,12 +43,20 @@ void HumanGraphicsScene::update(const HumanContourData& humanData,
   backgroundSeconds = elapsedSeconds;
   // Detectionはsegmentation実行時だけ更新されるため、同じ観測を毎描画フレーム
   // Trackerへ重複投入しない。
+  // 対応付けの距離は画面の大きさに合わせる（本番の高さ約1000pxで約200px）。
+  objectTracker.maxMatchDistance =
+      kTrackerMatchDistanceRatio * static_cast<float>(activeCanvasHeight());
   const uint64_t currentDetectionSignature = detectionSignature(humanData);
   if (!hasDetectionSignature ||
       currentDetectionSignature != lastDetectionSignature) {
-    trackedObjects = objectTracker.update(humanData);
+    trackedObjects = objectTracker.update(humanData, elapsedSeconds);
     lastDetectionSignature = currentDetectionSignature;
     hasDetectionSignature = true;
+  } else {
+    // 検出が変わらない間も、見えている人は保ち、いない人の記録は時間で消す
+    // （0人が続く間に古いIDが残り、後から来た別人に再利用されるのを防ぐ）。
+    objectTracker.markSeen(trackedObjects, elapsedSeconds);
+    objectTracker.expireStale(elapsedSeconds);
   }
 
   const uint64_t currentPipelineSignature = pipelineSignature(currentDetectionSignature);

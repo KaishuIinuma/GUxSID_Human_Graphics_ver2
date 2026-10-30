@@ -13,7 +13,10 @@ namespace gux {
 // SceneObjectのID契約を先に固定し、将来Kalman/IoU Trackerへ交換できる境界にする。
 class ObjectTracker {
  public:
-  std::vector<TrackedObject> update(const HumanContourData& detections) {
+  // nowSeconds: 経過時間。検出結果が変わらない間も expireStale() で古い記録を消す。
+  std::vector<TrackedObject> update(const HumanContourData& detections,
+                                    float nowSeconds) {
+    expireStale(nowSeconds);
     struct DetectionView {
       size_t index = 0;
       glm::vec2 centroid{0.0f, 0.0f};
@@ -70,12 +73,14 @@ class ObjectTracker {
       if (matchedTrack >= 0) {
         state = &tracks[static_cast<size_t>(matchedTrack)];
       } else {
-        tracks.push_back({nextId++, views[detectionIndex].centroid, 0, 0});
+        tracks.push_back({nextId++, views[detectionIndex].centroid, 0, 0,
+                          nowSeconds});
         state = &tracks.back();
       }
 
       state->centroid = views[detectionIndex].centroid;
       state->missedFrames = 0;
+      state->lastSeenSeconds = nowSeconds;
       ++state->ageFrames;
 
       const size_t sourceIndex = views[detectionIndex].index;
@@ -99,13 +104,44 @@ class ObjectTracker {
     return visibleObjects;
   }
 
+  // 一定時間見えていない記録を消す。検出が0人のまま変わらない間は update() が
+  // 呼ばれないため、毎フレームこちらを呼んで、前の人のIDが別人に再利用されるのを防ぐ。
+  void expireStale(float nowSeconds) {
+    // 時間が巻き戻った（動画のループ等）ときは基準を今に合わせる。
+    for (auto& track : tracks) {
+      if (nowSeconds < track.lastSeenSeconds) track.lastSeenSeconds = nowSeconds;
+    }
+    tracks.erase(
+        std::remove_if(tracks.begin(), tracks.end(),
+                       [this, nowSeconds](const TrackState& track) {
+                         return nowSeconds - track.lastSeenSeconds >
+                                maxMissedSeconds;
+                       }),
+        tracks.end());
+  }
+
+  // 検出が変わらず update() を呼ばないフレームで、今も見えている人の記録を保つ。
+  void markSeen(const std::vector<TrackedObject>& visibleObjects,
+                float nowSeconds) {
+    for (const auto& object : visibleObjects) {
+      for (auto& track : tracks) {
+        if (track.id == object.id) {
+          track.lastSeenSeconds = nowSeconds;
+          break;
+        }
+      }
+    }
+  }
+
   void reset() {
     tracks.clear();
     nextId = 1;
   }
 
+  // 対応付けの最大距離（px）。HumanGraphicsScene が画面の高さに合わせて設定する。
   float maxMatchDistance = 200.0f;
   std::uint32_t maxMissedFrames = 10;
+  float maxMissedSeconds = 1.0f;
 
  private:
   struct TrackState {
@@ -113,6 +149,7 @@ class ObjectTracker {
     glm::vec2 centroid{0.0f, 0.0f};
     std::uint32_t missedFrames = 0;
     std::uint64_t ageFrames = 0;
+    float lastSeenSeconds = 0.0f;
   };
 
   static glm::vec2 contourCentroid(const ofPolyline& contour) {

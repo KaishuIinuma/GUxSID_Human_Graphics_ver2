@@ -139,6 +139,17 @@ public:
   void applyCameraSelection();
   static std::string cameraDisplayName(const ofVideoDevice &device);
 
+  // カメラは番号ではなく機器ごとの固有の名前(キー)で保存する。
+  // macOSのカメラ番号は、iPhone(連係カメラ)の有無やUSBの挿し順で変わるため。
+  // pCameraKey / pCamera2Key は controls.json にだけ保存し、Controlsには出さない。
+  ofParameter<string> pCameraKey;
+  ofParameter<string> pCamera2Key;
+  static std::string cameraKey(const ofVideoDevice &device);
+  int findCameraByKey(const std::string &key) const;
+  // 起動時: 保存済みのキーから、今のカメラ番号を探し直す。
+  void resolveSavedCameras();
+  bool keepSavedCameraKeys = false;
+
   // ============================================
   // ★追加: 読み取った映像の左右反転（Realtimeモードのみ有効）
   // ============================================
@@ -260,6 +271,9 @@ public:
   // 送信先ポートは誤操作で変わらないよう固定する。変える場合はこの値を書き換える。
   static constexpr int kSoundOscPort = 7400;
   ofParameter<string> pSoundOscTarget;  // 表示専用（Controlsで変更できない）
+  // /gux/slot（TouchDesigner向け、毎フレーム16件）を送るか。SfxPlayerだけなら不要。
+  ofParameter<bool> pSoundOscSlots;
+  void onSoundOscSlotsChanged(bool &value);
   gux::SoundOscSender soundOscSender;
   void onSoundOscEnableChanged(bool &value);
 
@@ -361,7 +375,12 @@ public:
   // GUI設定の永続化と、Controls Windowの表示／再生成（Aキー）
   void setupGuiPersistence();
   void loadGuiSettings();
-  void saveGuiSettings() const;
+  void saveGuiSettings() const;  // 保存の予約（実際の書き込みは flushGuiSettings）
+  void flushGuiSettings(bool force) const;
+  void writeGuiSettings() const;
+  static constexpr uint64_t kGuiSettingsSaveDelayMs = 500;
+  mutable bool guiSettingsDirty = false;
+  mutable uint64_t guiSettingsDirtySinceMs = 0;
   void discoverPresetFiles();
   void onPresetIndexChanged(int &index);
   void updatePresetDirtyState();
@@ -475,7 +494,12 @@ public:
   bool guiRebuildPending = false;
   bool dualOutputActive() const { return realtimeMode && pDualOutput.get(); }
   std::shared_ptr<HumanGraphicsScene> humanGraphicsScene2;
+  // Dual Output時、系統2の人物IDにこの値を足して音へ送る (系統1のIDと重ならないように)。
+  static constexpr gux::ObjectId kSecondPipelineSoundIdOffset = 1000000;
+  std::vector<gux::SoundPerson> dualSoundPeople;
   PersonSegmenter personSegmenter2;
+  std::string secondSegmenterModelPath;  // personSegmenter2 に読み込んだモデル
+  void loadSecondSegmenterIfNeeded();
   std::future<HumanContourData> detectionFuture2;
   HumanContourData humanData2;
   uint64_t lastRealtimeProcessMs2 = 0;
