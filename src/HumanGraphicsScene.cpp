@@ -21,6 +21,8 @@ void hashCombine(uint64_t& seed, uint64_t value) {
 void HumanGraphicsScene::setup() {
   objectTracker.reset();
   trackedObjects.clear();
+  allTrackedObjects.clear();
+  shownIds.clear();
   geometryObjects.clear();
   sceneObjects.clear();
   soundPeopleList.clear();
@@ -40,7 +42,6 @@ void HumanGraphicsScene::update(const HumanContourData& humanData) {
 
 void HumanGraphicsScene::update(const HumanContourData& humanData,
                                 float elapsedSeconds, float deltaSeconds) {
-  backgroundSeconds = elapsedSeconds;
   // Detectionはsegmentation実行時だけ更新されるため、同じ観測を毎描画フレーム
   // Trackerへ重複投入しない。
   // 対応付けの距離は画面の大きさに合わせる（本番の高さ約1000pxで約200px）。
@@ -49,14 +50,19 @@ void HumanGraphicsScene::update(const HumanContourData& humanData,
   const uint64_t currentDetectionSignature = detectionSignature(humanData);
   if (!hasDetectionSignature ||
       currentDetectionSignature != lastDetectionSignature) {
-    trackedObjects = objectTracker.update(humanData, elapsedSeconds);
+    allTrackedObjects = objectTracker.update(humanData, elapsedSeconds);
     lastDetectionSignature = currentDetectionSignature;
     hasDetectionSignature = true;
+    filterSmallPeople();
   } else {
     // 検出が変わらない間も、見えている人は保ち、いない人の記録は時間で消す
     // （0人が続く間に古いIDが残り、後から来た別人に再利用されるのを防ぐ）。
-    objectTracker.markSeen(trackedObjects, elapsedSeconds);
+    objectTracker.markSeen(allTrackedObjects, elapsedSeconds);
     objectTracker.expireStale(elapsedSeconds);
+  }
+  if (minPersonSize != lastMinPersonSize ||
+      activeCanvasHeight() != lastFilterCanvasHeight) {
+    filterSmallPeople();
   }
 
   const uint64_t currentPipelineSignature = pipelineSignature(currentDetectionSignature);
@@ -80,9 +86,7 @@ void HumanGraphicsScene::update(const HumanContourData& humanData,
 
   materialAssignmentSystem.update(
       sceneObjects, ofApp::colorPallate, ofApp::colorPaletteSize,
-      ofApp::colorUpdateIntervalMs, baseMaterialType, outlineMaterialType,
-      lockedPaletteIndices,
-      static_cast<uint64_t>(std::max(0.0f, elapsedSeconds) * 1000.0f));
+      baseMaterialType, outlineMaterialType, lockedPaletteIndices);
 
   if (compositionUpdated && sceneLayout) {
     gux::LayoutContext layoutContext;
@@ -116,11 +120,17 @@ void HumanGraphicsScene::draw() {
 void HumanGraphicsScene::draw(bool drawBackground) {
   if (drawBackground) {
     ofBackground(ofApp::background_color);
-    backgroundGradientPass.draw(activeCanvasWidth(), activeCanvasHeight(),
-                                backgroundSeconds, ofColor(ofApp::background_color),
-                                backgroundGradient);
   }
   if (!renderRecipe) return;
+  // 現れる進み具合は毎フレーム変わるので、パイプラインは作り直さず描く直前に入れる。
+  for (auto& object : sceneObjects) {
+    object.reveal = 1.0f;
+    if (revealProgress.empty()) continue;
+    const gux::ObjectId id = object.sourceObjectIds.empty()
+        ? object.id : object.sourceObjectIds.front();
+    const auto found = revealProgress.find(id);
+    if (found != revealProgress.end()) object.reveal = found->second;
+  }
   const gux::RenderContext context = renderContext();
   // 紙の影は、紙と同じ Recipe で形を描いてから作る。どの Recipe でも同じように効く。
   // 結ぶストロークはObject本体より前面に描き、紙の影にも含める。
@@ -163,11 +173,6 @@ int HumanGraphicsScene::activeCanvasHeight() const {
 void HumanGraphicsScene::setRenderRecipe(const std::string& recipeId) {
   // Recipeの切り替え後は、Compositionからやり直す。
   hasPipelineSignature = false;
-  if (recipeId == gux::MixRenderRecipe::RecipeId) {
-    renderRecipe = std::make_shared<gux::MixRenderRecipe>();
-    return;
-  }
-
   if (recipeId != gux::StandardRenderRecipe::RecipeId) {
     ofLogWarning("HumanGraphicsScene")
         << "Unknown Recipe ID: " << recipeId
@@ -239,8 +244,36 @@ uint64_t HumanGraphicsScene::detectionSignature(
   return signature;
 }
 
+// 小さく映っている人 (遠くの人など) を除く。境目でちらつかないよう、
+// 一度表示した人は閾値の85%を下回るまで表示し続ける。
+void HumanGraphicsScene::filterSmallPeople() {
+  lastMinPersonSize = minPersonSize;
+  lastFilterCanvasHeight = activeCanvasHeight();
+  const float canvasH = static_cast<float>(std::max(1, lastFilterCanvasHeight));
+  const float showSize = minPersonSize * canvasH;
+  const float hideSize = showSize * 0.85f;
+
+  std::unordered_set<gux::ObjectId> nextShown;
+  trackedObjects.clear();
+  trackedObjects.reserve(allTrackedObjects.size());
+  for (const auto& object : allTrackedObjects) {
+    bool show = true;
+    if (minPersonSize > 0.0f) {
+      const ofRectangle box = object.contour.getBoundingBox();
+      const float size = std::max(box.width, box.height);
+      const bool wasShown = shownIds.count(object.id) > 0;
+      show = size >= (wasShown ? hideSize : showSize);
+    }
+    if (!show) continue;
+    nextShown.insert(object.id);
+    trackedObjects.push_back(object);
+  }
+  shownIds = std::move(nextShown);
+}
+
 uint64_t HumanGraphicsScene::pipelineSignature(uint64_t detectionHash) const {
   uint64_t signature = detectionHash;
+  hashCombine(signature, std::hash<float>{}(minPersonSize));
   hashCombine(signature, std::hash<int>{}(ofApp::vertexCount));
   hashCombine(signature, std::hash<bool>{}(enableBase));
   hashCombine(signature, std::hash<bool>{}(enableOffset));
@@ -266,6 +299,16 @@ uint64_t HumanGraphicsScene::pipelineSignature(uint64_t detectionHash) const {
               std::hash<size_t>{}(ofApp::compositionStrokeMergeMaxVertices));
   hashCombine(signature, std::hash<int>{}(activeCanvasWidth()));
   hashCombine(signature, std::hash<int>{}(activeCanvasHeight()));
+  // 人ごとの上書きは順不同なので、各要素のハッシュを足し合わせる。
+  uint64_t overridesHash = shapeOverrides.size();
+  for (const auto& [id, shape] : shapeOverrides) {
+    uint64_t item = id;
+    hashCombine(item, std::hash<int>{}(shape.vertexCount));
+    hashCombine(item, std::hash<float>{}(shape.scale));
+    overridesHash += item;
+  }
+  hashCombine(signature, overridesHash);
+  hashCombine(signature, std::hash<bool>{}(mergeSuppressed));
   return signature;
 }
 
@@ -278,13 +321,14 @@ gux::GeometrySettings HumanGraphicsScene::geometrySettings() const {
   settings.offsetSize = offsetSize;
   settings.offsetScale = offsetScale;
   settings.offsetJoinType = offsetJoinType;
+  settings.shapeOverrides = shapeOverrides.empty() ? nullptr : &shapeOverrides;
   return settings;
 }
 
 gux::CompositionSettings HumanGraphicsScene::compositionSettings() const {
   gux::CompositionSettings settings;
   // 再配置では並び順・個体数を保つ必要があるため、事前結合しない。
-  settings.enableMerge = enableMerge &&
+  settings.enableMerge = enableMerge && !mergeSuppressed &&
       sceneLayoutId() == gux::StandardSceneLayout::LayoutId &&
       sceneBehaviorId() == gux::StandardSceneBehavior::BehaviorId;
   settings.enableBase = enableBase;
@@ -322,6 +366,34 @@ gux::RenderContext HumanGraphicsScene::renderContext() const {
 // 合体後の形はすべての元IDを持つため、誰と誰が合体したかは形の内外で判定する。
 // 並べ替え・レイアウト前に呼び、合体後の形と元の形が同じ座標系にある状態で比べる。
 void HumanGraphicsScene::updateSoundPeople() {
+  if (soundShapesFrozen) {
+    // 前回の輪郭・グループを、人の重心の移動に合わせて動かすだけにする。
+    std::unordered_map<gux::ObjectId, gux::SoundPerson> previous;
+    for (auto& person : soundPeopleList) previous[person.id] = std::move(person);
+    soundPeopleList.clear();
+    soundPeopleList.reserve(trackedObjects.size());
+    for (const auto& tracked : trackedObjects) {
+      gux::SoundPerson person;
+      auto it = previous.find(tracked.id);
+      if (it != previous.end()) {
+        person = std::move(it->second);
+        const glm::vec2 delta = tracked.centroid - person.centroid;
+        for (auto& vertex : person.vertices) vertex += delta;
+      } else {
+        person.id = tracked.id;
+        person.group = tracked.id;
+        person.vertices.reserve(tracked.contour.size());
+        for (const auto& point : tracked.contour) {
+          person.vertices.emplace_back(point.x, point.y);
+        }
+      }
+      person.centroid = tracked.centroid;
+      person.area = std::abs(tracked.contour.getArea());
+      soundPeopleList.push_back(std::move(person));
+    }
+    return;
+  }
+
   soundPeopleList.clear();
   soundPeopleList.reserve(trackedObjects.size());
 

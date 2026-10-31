@@ -20,6 +20,9 @@ struct SceneObject {
   Transform2D transform;
   AppearanceComponent appearance;
   std::uint32_t instanceIndex = 0;
+  // 現れる途中の進み具合 (0〜1)。1 で全体を描く。プリセット切り替えの演出で使う。
+  //   塗り: 左下から右上へ色面が入る / 線: 輪郭を一筆書きのようになぞる
+  float reveal = 1.0f;
 
   SceneObject clone(ObjectId newId, std::uint32_t newInstanceIndex) const {
     SceneObject copy = *this;

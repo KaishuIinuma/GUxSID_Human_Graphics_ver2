@@ -1,12 +1,12 @@
 #pragma once
 
+#include <unordered_set>
+
 #include "BaseScene.h"
 #include "core/VisualTypes.h"
 #include "event/StandardMergeEvent.h"
 #include "geometry/GeometryProcessor.h"
 #include "material/MaterialAssignmentSystem.h"
-#include "render/BackgroundGradientPass.h"
-#include "render/MixRenderRecipe.h"
 #include "render/PaperShadowPass.h"
 #include "render/BridgeStrokePass.h"
 #include "render/StandardRenderRecipe.h"
@@ -17,6 +17,7 @@
 #include "tracking/ObjectTracker.h"
 
 #include <memory>
+#include <unordered_map>
 
 // HumanGraphicsSceneは各段階を接続するControllerだけを担当する。
 // Detection自体はofApp/PersonSegmenterが担当し、ここではその結果を受け取る。
@@ -41,6 +42,37 @@ class HumanGraphicsScene : public BaseScene {
 
   // 音の送信用。人ごとの位置・面積と、合体グループを返す（キャンバスのピクセル単位）。
   const std::vector<gux::SoundPerson>& soundPeople() const { return soundPeopleList; }
+  // プリセット切り替えの演出中は true にする。形が縮む動きを人の動きとして
+  // 音へ送らないよう、音に渡す輪郭とグループを演出前のまま保つ
+  // (輪郭は人の重心の移動に合わせて平行移動する)。
+  void setSoundShapesFrozen(bool frozen) {
+    if (soundShapesFrozen == frozen) return;
+    soundShapesFrozen = frozen;
+    hasPipelineSignature = false;
+  }
+  // プリセット切り替えの演出用: 人ごとに頂点数とScaleを上書きする。
+  // 載っていない人は通常の Vertex Count / offsetScale を使う。
+  void setShapeOverrides(std::unordered_map<gux::ObjectId, gux::ShapeOverride> overrides) {
+    shapeOverrides = std::move(overrides);
+  }
+  void clearShapeOverrides() { shapeOverrides.clear(); }
+  // 人ごとの現れる進み具合 (0〜1)。載っていない人は 1 (全体を描く)。
+  void setRevealProgress(std::unordered_map<gux::ObjectId, float> progress) {
+    revealProgress = std::move(progress);
+  }
+  void clearRevealProgress() { revealProgress.clear(); }
+  // 演出中は合体させない (現れる途中の形どうしが合体すると、描き始めがずれるため)。
+  void setMergeSuppressed(bool suppressed) { mergeSuppressed = suppressed; }
+  // 演出中は、人が順番に消えたり現れたりしても一人ひとりの色を保つ。
+  void setHoldColors(bool hold) { materialAssignmentSystem.setHoldColors(hold); }
+  // 今トラッキングしている人のID。
+  std::vector<gux::ObjectId> trackedIds() const {
+    std::vector<gux::ObjectId> ids;
+    ids.reserve(trackedObjects.size());
+    for (const auto& object : trackedObjects) ids.push_back(object.id);
+    return ids;
+  }
+
   // 結ぶストローク用の重心(このSceneのキャンバス座標)。
   std::vector<glm::vec2> bridgeStrokePoints() const {
     return gux::BridgeStrokePass::centroids(sceneObjects);
@@ -66,6 +98,9 @@ class HumanGraphicsScene : public BaseScene {
   bool enableMerge = true;
   bool enableLooseContour = false;
   float looseContourStrength = 7.0f;
+  // これより小さい人は描かない (音にも送らない)。輪郭の外接矩形の長い辺が
+  // キャンバスの高さに占める割合。0 なら全員を描く。
+  float minPersonSize = 0.0f;
   float offsetSize = 200.0f;
   float offsetScale = 1.0f;
   OffsetJoinType offsetJoinType = OffsetJoinType::Round;
@@ -74,7 +109,6 @@ class HumanGraphicsScene : public BaseScene {
   gux::MaterialType baseMaterialType = gux::MaterialType::Solid;
   gux::MaterialType outlineMaterialType = gux::MaterialType::Solid;
   gux::PaperShadowSettings paperShadow;
-  gux::BackgroundGradientSettings backgroundGradient;
 
  private:
   gux::ObjectTracker objectTracker;
@@ -92,13 +126,19 @@ class HumanGraphicsScene : public BaseScene {
   gux::BridgeStrokePass bridgeStrokePass;
   std::vector<glm::vec2> bridgeStrokeOverride;
   bool hasBridgeStrokeOverride = false;
-  gux::BackgroundGradientPass backgroundGradientPass;
-  float backgroundSeconds = 0.0f;  // 背景のにじみが漂う時間（書き出しでは動画の時間）
 
-  std::vector<gux::TrackedObject> trackedObjects;
+  std::vector<gux::TrackedObject> allTrackedObjects;  // Trackerの結果 (小さい人も含む)
+  std::vector<gux::TrackedObject> trackedObjects;     // 描く人だけ
+  std::unordered_set<gux::ObjectId> shownIds;         // 大きさの判定で表示中の人
+  float lastMinPersonSize = -1.0f;
+  int lastFilterCanvasHeight = -1;
   std::vector<gux::GeometryObject> geometryObjects;
   std::vector<gux::SceneObject> sceneObjects;
   std::vector<gux::SoundPerson> soundPeopleList;
+  bool soundShapesFrozen = false;
+  std::unordered_map<gux::ObjectId, gux::ShapeOverride> shapeOverrides;
+  std::unordered_map<gux::ObjectId, float> revealProgress;
+  bool mergeSuppressed = false;
 
   uint64_t lastDetectionSignature = 0;
   uint64_t lastPipelineSignature = 0;
@@ -116,4 +156,5 @@ class HumanGraphicsScene : public BaseScene {
   gux::CompositionSettings compositionSettings() const;
   gux::RenderContext renderContext() const;
   void updateSoundPeople();
+  void filterSmallPeople();
 };

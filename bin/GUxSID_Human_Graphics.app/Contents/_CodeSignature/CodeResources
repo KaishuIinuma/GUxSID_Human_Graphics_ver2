@@ -16,26 +16,6 @@
 		<data>
 		QSK79bz2VefhDcP1PFqF7CRkMSg=
 		</data>
-		<key>Resources/data/presets/default.json</key>
-		<data>
-		wDHh3QsqKBatZnMF8l7nlJm+lw0=
-		</data>
-		<key>Resources/data/presets/fill.json</key>
-		<data>
-		L+Oo66ExgV0Cg6KvFhyOxEtSBYw=
-		</data>
-		<key>Resources/data/presets/mix_render.json</key>
-		<data>
-		eDtmQypgZmymHuzJTW/EECtc+1o=
-		</data>
-		<key>Resources/data/presets/stroke_Poly.json</key>
-		<data>
-		xGyjmxXg1GDGY4tA3XDgqmw12Ds=
-		</data>
-		<key>Resources/data/presets/stroke_Round.json</key>
-		<data>
-		gDmKipQjUk/m5dHQh92VLsyVA/c=
-		</data>
 		<key>Resources/data/settings.xml</key>
 		<data>
 		qAeVxsP0KyigYyNYwDs+LV6yZ1Y=
@@ -90,41 +70,6 @@
 			<key>hash2</key>
 			<data>
 			vMkRD51jihGd4tt6+zupodqAhfDLNAHhxIrhyvRQtvo=
-			</data>
-		</dict>
-		<key>Resources/data/presets/default.json</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			WypMjz7nO4pD+yyevouAhbdQxqeiPGN9oTvPE9edAwI=
-			</data>
-		</dict>
-		<key>Resources/data/presets/fill.json</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			xoiGvdcZ3pGA8A8v0PK9t0zLKyTUyDaudSQ2PbeA4Mg=
-			</data>
-		</dict>
-		<key>Resources/data/presets/mix_render.json</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			yjb58OKTL4Atg/on/Luvwk8/TnVD0J9szr1ldNAW5Fo=
-			</data>
-		</dict>
-		<key>Resources/data/presets/stroke_Poly.json</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			KAn+D1oQzLwcGuBlvJ9Tu+9BGCIdwNQ/l2P5KZqt5G0=
-			</data>
-		</dict>
-		<key>Resources/data/presets/stroke_Round.json</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			PT2b1y+vQP0loXgO7DNFxhycrk//5QPuYrkZPF4h57E=
 			</data>
 		</dict>
 		<key>Resources/data/settings.xml</key>

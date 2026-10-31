@@ -1,5 +1,6 @@
 #include "ofApp.h"
 #include "CameraAuthorization.h"
+#include "StableCameraGrabber.h"
 #include "SourceCrop.h"
 #include <GLFW/glfw3.h> // guiWindow/mainWindowの表示切り替え・リサイズ用
 #include <algorithm>
@@ -16,67 +17,14 @@ namespace {
 const std::string kSettingsDirectoryName =
     "Library/Application Support/GUxSID_Human_Graphics_ver2";
 const std::string kControlsFileName = "controls.json";
-const std::string kPresetDirectoryName = "presets";
+// コード内の初期値 (setupGuiParameters) の版。上げると、保存済みの controls.json が
+// これより古いMacでは次の起動時に一度だけ初期値で強制的に上書きする
+// (元のファイルは controls.backup.json に残す)。上書き後は通常どおり保存・復元する。
+const std::string kControlsDefaultsVersion = "20261031";
+const std::string kControlsDefaultsVersionKey = "Defaults_Version";
 
 std::string settingsDirectoryPath() {
   return ofFilePath::join(ofFilePath::getUserHomeDir(), kSettingsDirectoryName);
-}
-
-std::string userPresetDirectoryPath() {
-  return ofFilePath::join(settingsDirectoryPath(), kPresetDirectoryName);
-}
-
-// 廃止したモード用のプリセット。以前の配布版や保存先に残っていれば消す。
-const std::vector<std::string> kObsoletePresetFileNames = {
-    "floating_bridge.json",
-};
-
-void removeObsoletePresetFiles(const std::string &directoryPath) {
-  for (const auto &fileName : kObsoletePresetFileNames) {
-    const std::string path = ofFilePath::join(directoryPath, fileName);
-    ofFile file(path);
-    if (!file.exists()) continue;
-    if (file.remove()) {
-      ofLogNotice("ofApp") << "廃止したプリセットを削除しました: " << path;
-    } else {
-      ofLogWarning("ofApp") << "廃止したプリセットを削除できませんでした: " << path;
-    }
-  }
-}
-
-std::string lowerCase(std::string value) {
-  std::transform(value.begin(), value.end(), value.begin(),
-                 [](unsigned char character) {
-                   return static_cast<char>(std::tolower(character));
-                 });
-  return value;
-}
-
-bool normalizePresetFileName(const std::string &input,
-                             std::string &fileName,
-                             std::string &errorMessage) {
-  fileName = ofTrim(input);
-  if (fileName.empty()) {
-    errorMessage = "Enter a preset name";
-    return false;
-  }
-  if (fileName == "." || fileName == ".." ||
-      fileName.find_first_of("/\\:") != std::string::npos) {
-    errorMessage = "Preset name cannot contain /, \\ or :";
-    return false;
-  }
-
-  const std::string jsonExtension = ".json";
-  if (fileName.size() < jsonExtension.size() ||
-      lowerCase(fileName.substr(fileName.size() - jsonExtension.size())) !=
-          jsonExtension) {
-    fileName += jsonExtension;
-  }
-  if (fileName.size() == jsonExtension.size()) {
-    errorMessage = "Enter a name before .json";
-    return false;
-  }
-  return true;
 }
 
 void migrateLegacyScaleKey(ofJson& settings) {
@@ -97,6 +45,25 @@ void migrateLegacyPersonConfidenceKey(ofJson& settings) {
   if (legacy == controls->end()) return;
   if (controls->find("YOLO_Confidence") == controls->end()) {
     (*controls)["YOLO_Confidence"] = *legacy;
+  }
+}
+
+// プリセット廃止に伴い Auto Cycle 関連の名前から "Preset" を外した。
+void migrateLegacyAutoCycleKeys(ofJson& settings) {
+  if (!settings.is_object()) return;
+  auto controls = settings.find("ControlsSettings");
+  if (controls == settings.end() || !controls->is_object()) return;
+  const std::pair<const char *, const char *> renames[] = {
+      {"Preset_Auto_Cycle", "Auto_Cycle"},
+      {"Preset_Cycle_Interval__s_", "Cycle_Interval__s_"},
+      {"Preset_Transition__s_", "Transition__s_"},
+      {"Preset_Transition_Window__s_", "Transition_Window__s_"},
+  };
+  for (const auto &[oldKey, newKey] : renames) {
+    const auto legacy = controls->find(oldKey);
+    if (legacy != controls->end() && controls->find(newKey) == controls->end()) {
+      (*controls)[newKey] = *legacy;
+    }
   }
 }
 
@@ -201,6 +168,10 @@ void ofApp::setup() {
   // ============================================
   // ★追加/修正: カメラデバイスの取得と初期化
   // ============================================
+  // 同じ名前のカメラが複数あっても番号と実機がずれないよう、並び順を固定した
+  // 取り込みを使う (StableCameraGrabber.h)。
+  cam.setGrabber(std::make_shared<StableCameraGrabber>());
+  cam2.setGrabber(std::make_shared<StableCameraGrabber>());
   if (ensureCameraAuthorization()) {
     cameraDevices = cam.listDevices();
     for (size_t i = 0; i < cameraDevices.size(); ++i) {
@@ -280,40 +251,43 @@ void ofApp::setupGuiParameters() {
   pMainWindowResolution.set("Main Window Resolution", "-- x --");
   pMainWindowFps.set("Main Window FPS", "--");
   pRunTime.set("Run Time", "00:00:00");
-  pMainWindowTargetFps.set("Main Window Target FPS", 60, 1, 120);
+  pMainWindowTargetFps.set("Main Window Target FPS", 24, 1, 120);
   // ★追加: カメラ選択用パラメーターの初期化
   int maxCameraIndex = std::max(0, (int)cameraDevices.size() - 1);
-  int defaultCameraIndex = getDefaultCameraIndex();
+  // 展示機の初期値: カメラ1 = 1番, カメラ2 = 0番 (台数が足りなければ範囲内に収める)。
+  int defaultCameraIndex = std::min(1, maxCameraIndex);
   pCameraIndex.set("Camera ID", defaultCameraIndex, 0, maxCameraIndex);
   
   string defaultCamName = cameraDevices.empty() ? "No Camera Found" : cameraDevices[defaultCameraIndex].deviceName;
   pCameraName.set("Camera Name", defaultCamName);
-  // 仮の既定値: カメラ2もカメラ1と同じ機器 (共有) にする。
-  pCamera2Index.set("Camera 2 ID", defaultCameraIndex, 0, maxCameraIndex);
-  pCameraKey.set("Camera Key", "");
-  pCamera2Key.set("Camera 2 Key", "");
+  pCamera2Index.set("Camera 2 ID", 0, 0, maxCameraIndex);
   setupCameraChoices();
 
-  discoverPresetFiles();
-  pPresetIndex.set("Preset ID", static_cast<int>(presetPaths.size()), 0,
-                   static_cast<int>(presetPaths.size()));
-  pPresetName.set("Preset Name", "");
-  pPresetStatus.set("Preset Status", "No preset selected");
+  // Auto Cycle: 一定の間隔で Fill (Base) と Stroke のトグルを入れ替える。
+  pAutoCycle.set("Auto Cycle", true);
+  // 本番は3分(180秒)くらいを想定。確認用の初期値は30秒。
+  pCycleSeconds.set("Cycle Interval (s)", 6.0625f, 5.0f, 600.0f);
+  // 一人分の切り替えの演出の長さ。0なら演出なしで切り替える。
+  pTransitionSeconds.set("Transition (s)", 0.5f, 0.0f, 10.0f);
+  // 全員の変化が収まる時間。一人ひとりはこの中のランダムな時刻に変わる。
+  pTransitionWindowSeconds.set("Transition Window (s)", 1.98214f, 0.0f, 30.0f);
 
   // ★追加: 左右反転トグル（デフォルトOFF）
-  pFlipHorizontal.set("Flip Horizontal", false);
-  pProjectionSafeArea.set("Projection Margin", true);
-  pDualOutput.set("Dual Output (2 Screens)", false);
+  pFlipHorizontal.set("Flip Horizontal", true);
+  pProjectionSafeArea.set("Projection Margin", false);
+  pDualOutput.set("Dual Output (2 Screens)", true);
 
+  personSegmenter.yoloConfidenceThreshold = 0.214286f;
   pYoloConfidence.set("YOLO Confidence",
                       personSegmenter.yoloConfidenceThreshold, 0.0f, 1.0f);
   pYoloInput320.set("YOLO Input 320", false);
 
+  vertexCount = 17;
   pVertexCount.set("Vertex Count", vertexCount, 4, 100);
   pLooseContour.set("Loose Contour", false);
-  pLooseContourStrength.set("Loose Contour Strength", 7.0f, 0.0f, 30.0f);
-  pAspectRatio.set("Aspect Ratio", 0.0f, -50.0f, 50.0f);
-  pColorUpdateIntervalSec.set("Color Update Interval (s)", static_cast<float>(colorUpdateIntervalMs) / 1000.0f, 0.0f, 20.0f);
+  pLooseContourStrength.set("Loose Contour Strength", 0.0f, 0.0f, 30.0f);
+  pMinPersonSize.set("Min Person Size", 0.196429f, 0.0f, 1.0f);
+  pAspectRatio.set("Aspect Ratio", 0.17857f, -50.0f, 50.0f);
   pVideoPeopleCount.set("Video People", 1, 1, 20);
   pVideoSoloColor.set("Solo Color", 1, 1,
                       static_cast<int>(colorPaletteSize));
@@ -321,13 +295,13 @@ void ofApp::setupGuiParameters() {
   pVideoPlaybackSpeed.set("Video Playback Speed", 1.0f, 0.1f, 2.0f);
  
 
-  pGraphicsEnableBase.set("Graphics Base Enable", true);
+  pGraphicsEnableBase.set("Graphics Base Enable", false);
   pGraphicsEnableOffset.set("Graphics Offset Enable", true);
   pGraphicsEnableStroke.set("Graphics Stroke Enable", true);
-  pGraphicsEnableBridgeStroke.set("Graphics Bridge Stroke Enable", false);
+  pGraphicsEnableBridgeStroke.set("Graphics Bridge Stroke Enable", true);
   pGraphicsMergeEnable.set("Graphics Merge Enable", true);
-  pGraphicsOffsetSize.set("Graphics Offset Size", 200.0f, 0.0f, 600.0f);
-  pGraphicsOffsetScale.set("Scale", 1.0f, 0.1f, 2.0f);
+  pGraphicsOffsetSize.set("Graphics Offset Size", 40.7143f, 0.0f, 600.0f);
+  pGraphicsOffsetScale.set("Scale", 0.971964f, 0.1f, 2.0f);
   pGraphicsOffsetRound.set("Graphics Offset Round Mode", true);
   pGraphicsStrokeWeight.set("Graphics Stroke Weight", 10.0f, 0.1f, 200.0f);
   pGraphicsStrokeRound.set("Graphics Stroke Round Mode", true);
@@ -338,12 +312,9 @@ void ofApp::setupGuiParameters() {
   pSceneLayoutId.set("Layout ID", "standard_layout");
   pSceneBehaviorId.set("Behavior ID", "standard_behavior");
   pPaperShadowEnable.set("Paper Shadow", true);
-  pPaperShadowLift.set("Paper Shadow Lift", 1.0f, 0.0f, 4.0f);
-  pPaperShadowAngle.set("Paper Shadow Angle", 60.0f, 0.0f, 360.0f);
-  pPaperShadowOpacity.set("Paper Shadow Opacity", 1.0f, 0.0f, 3.0f);
-  pBackgroundGradientEnable.set("Background Gradient", true);
-  pBackgroundGradientDepth.set("Background Gradient Depth", 0.08f, 0.0f, 0.3f);
-  pBackgroundGradientSpeed.set("Background Gradient Speed", 1.0f, 0.0f, 4.0f);
+  pPaperShadowLift.set("Paper Shadow Lift", 1.62857f, 0.0f, 4.0f);
+  pPaperShadowAngle.set("Paper Shadow Angle", 64.2857f, 0.0f, 360.0f);
+  pPaperShadowOpacity.set("Paper Shadow Opacity", 0.969643f, 0.0f, 3.0f);
   pExportAlpha.set("alpha", false);
   pSoundOscEnable.set("Sound OSC Out", true);
   pSoundOscSlots.set("OSC Slots (TouchDesigner)", false);
@@ -371,9 +342,6 @@ void ofApp::setupGuiParameters() {
   pPaperShadowLift.addListener(this, &ofApp::onLookValueChanged);
   pPaperShadowAngle.addListener(this, &ofApp::onLookValueChanged);
   pPaperShadowOpacity.addListener(this, &ofApp::onLookValueChanged);
-  pBackgroundGradientEnable.addListener(this, &ofApp::onLookEnableChanged);
-  pBackgroundGradientDepth.addListener(this, &ofApp::onLookValueChanged);
-  pBackgroundGradientSpeed.addListener(this, &ofApp::onLookValueChanged);
   pSoundOscEnable.addListener(this, &ofApp::onSoundOscEnableChanged);
   pSoundOscSlots.addListener(this, &ofApp::onSoundOscSlotsChanged);
 
@@ -382,7 +350,6 @@ void ofApp::setupGuiParameters() {
   // 表示状態にかかわらず、すべての操作可能なパラメータを保存対象にする。
   setupGuiPersistence();
   loadGuiSettings();
-  resolveSavedCameras();
 
   // 保存済みモードを先に確定し、Video起動時にカメラを開かないようにする。
   // ofParameterのリスナーはこの後で登録するため、ここでは明示的に反映する。
@@ -413,8 +380,8 @@ void ofApp::setupGuiParameters() {
   pLooseContour.addListener(this, &ofApp::onLooseContourChanged);
   pLooseContourStrength.addListener(
       this, &ofApp::onLooseContourStrengthChanged);
+  pMinPersonSize.addListener(this, &ofApp::onMinPersonSizeChanged);
   pAspectRatio.addListener(this, &ofApp::onAspectRatioChanged);
-  pColorUpdateIntervalSec.addListener(this, &ofApp::onColorUpdateIntervalChanged);
   pVideoPeopleCount.addListener(this, &ofApp::onVideoPeopleCountChanged);
   pVideoSoloColor.addListener(this, &ofApp::onVideoSoloColorChanged);
   pVideoColorLock.addListener(this, &ofApp::onVideoColorLockChanged);
@@ -423,31 +390,27 @@ void ofApp::setupGuiParameters() {
   pMainWindowTargetFps.addListener(
       this, &ofApp::onMainWindowTargetFpsChanged);
   pExportAlpha.addListener(this, &ofApp::onExportAlphaChanged);
-  pPresetIndex.addListener(this, &ofApp::onPresetIndexChanged);
+  pAutoCycle.addListener(this, &ofApp::onAutoCycleChanged);
+  pCycleSeconds.addListener(this, &ofApp::onCycleSecondsChanged);
+  pTransitionSeconds.addListener(this, &ofApp::onTransitionSecondsChanged);
+  pTransitionWindowSeconds.addListener(this, &ofApp::onTransitionSecondsChanged);
 
   playButton.setup("Play");
   pauseButton.setup("Pause");
   restartButton.setup("Restart from beginning");
   openVideoButton.setup("Open Video / Image...");
   exportImageSequenceButton.setup("Export Image Sequence");
-  savePresetButton.setup("Preset-Save");
-  revertPresetButton.setup("Preset-Revert");
   playButton.addListener(this, &ofApp::onPlayPressed);
   pauseButton.addListener(this, &ofApp::onPausePressed);
   restartButton.addListener(this, &ofApp::onRestartPressed);
   openVideoButton.addListener(this, &ofApp::onOpenVideoPressed);
   exportImageSequenceButton.addListener(this, &ofApp::onExportImageSequencePressed);
-  savePresetButton.addListener(this, &ofApp::onSavePresetPressed);
-  revertPresetButton.addListener(this, &ofApp::onRevertPresetPressed);
 
   // 保存済みの値を、GUI以外の実行状態にも反映する。
   int savedCameraIndex = pCameraIndex.get();
-  keepSavedCameraKeys = true;  // 起動時は保存済みのキーを上書きしない
   onCameraIndexChanged(savedCameraIndex);
-  keepSavedCameraKeys = false;
   personSegmenter.yoloConfidenceThreshold = pYoloConfidence.get();
   vertexCount = pVertexCount.get();
-  colorUpdateIntervalMs = static_cast<uint64_t>(pColorUpdateIntervalSec.get() * 1000.0f);
   videoProcessor.setPlaybackSpeed(pVideoPlaybackSpeed.get());
   if (humanGraphicsScene) {
     humanGraphicsScene->enableBase = pGraphicsEnableBase.get();
@@ -457,6 +420,7 @@ void ofApp::setupGuiParameters() {
     humanGraphicsScene->enableMerge = pGraphicsMergeEnable.get();
     humanGraphicsScene->enableLooseContour = pLooseContour.get();
     humanGraphicsScene->looseContourStrength = pLooseContourStrength.get();
+    humanGraphicsScene->minPersonSize = pMinPersonSize.get();
     humanGraphicsScene->offsetSize = pGraphicsOffsetSize.get();
     humanGraphicsScene->offsetScale = pGraphicsOffsetScale.get();
     humanGraphicsScene->offsetJoinType = pGraphicsOffsetRound.get()
@@ -468,6 +432,11 @@ void ofApp::setupGuiParameters() {
         ? gux::MaterialType::LinearGradient : gux::MaterialType::Solid;
     humanGraphicsScene->outlineMaterialType = pGraphicsStrokeMaterial.get() == 1
         ? gux::MaterialType::LinearGradient : gux::MaterialType::Solid;
+    // 廃止した Recipe (mix_render など) が保存されていたら standard_render に戻す。
+    if (pRenderRecipeId.get() != gux::StandardRenderRecipe::RecipeId) {
+      pRenderRecipeId.setWithoutEventNotifications(
+          std::string(gux::StandardRenderRecipe::RecipeId));
+    }
     humanGraphicsScene->setRenderRecipe(pRenderRecipeId.get());
     humanGraphicsScene->setMergeEvent(pMergeEventId.get());
     humanGraphicsScene->setSceneLayout(pSceneLayoutId.get());
@@ -486,8 +455,6 @@ void ofApp::setupGuiPersistence() {
   guiParams.add(pRealtime);
   guiParams.add(pCameraIndex);
   guiParams.add(pCamera2Index);
-  guiParams.add(pCameraKey);
-  guiParams.add(pCamera2Key);
   guiParams.add(pFlipHorizontal);
   guiParams.add(pProjectionSafeArea);
   guiParams.add(pDualOutput);
@@ -498,7 +465,7 @@ void ofApp::setupGuiPersistence() {
   guiParams.add(pAspectRatio);
   guiParams.add(pLooseContour);
   guiParams.add(pLooseContourStrength);
-  guiParams.add(pColorUpdateIntervalSec);
+  guiParams.add(pMinPersonSize);
   guiParams.add(pVideoPeopleCount);
   guiParams.add(pVideoSoloColor);
   guiParams.add(pVideoColorLock);
@@ -522,64 +489,16 @@ void ofApp::setupGuiPersistence() {
   guiParams.add(pPaperShadowLift);
   guiParams.add(pPaperShadowAngle);
   guiParams.add(pPaperShadowOpacity);
-  guiParams.add(pBackgroundGradientEnable);
-  guiParams.add(pBackgroundGradientDepth);
-  guiParams.add(pBackgroundGradientSpeed);
   guiParams.add(pMainWindowTargetFps);
   guiParams.add(pExportAlpha);
   guiParams.add(pSoundOscEnable);
   guiParams.add(pSoundOscSlots);
-
-  // プリセットは見た目・検出設定だけを変更し、現在の入力モード
-  // （RealtimeかVideoか）は変更しない。root名はcontrols.jsonと同じにして、
-  // 同じJSON形式のうち該当する項目だけを読み込めるようにする。
-  presetParams.clear();
-  presetParams.setName("ControlsSettings");
-  // カメラの選択とYOLOの入力サイズは機材側の設定なので、プリセットには含めない
-  // （読み込むとカメラが切り替わったり、モデルの読み直しで止まったりするため）。
-  // 以前に保存したプリセットにこの項目が残っていても、読み込み時は無視される。
-  presetParams.add(pFlipHorizontal);
-  presetParams.add(pYoloConfidence);
-  presetParams.add(pVertexCount);
-  presetParams.add(pGraphicsOffsetScale);
-  presetParams.add(pAspectRatio);
-  presetParams.add(pLooseContour);
-  presetParams.add(pLooseContourStrength);
-  presetParams.add(pColorUpdateIntervalSec);
-  presetParams.add(pVideoPeopleCount);
-  presetParams.add(pVideoSoloColor);
-  presetParams.add(pVideoColorLock);
-  presetParams.add(pVideoPlaybackSpeed);
-  presetParams.add(pGraphicsEnableBase);
-  presetParams.add(pGraphicsEnableOffset);
-  presetParams.add(pGraphicsEnableStroke);
-  presetParams.add(pGraphicsEnableBridgeStroke);
-  presetParams.add(pGraphicsMergeEnable);
-  presetParams.add(pGraphicsOffsetSize);
-  presetParams.add(pGraphicsOffsetRound);
-  presetParams.add(pGraphicsStrokeWeight);
-  presetParams.add(pGraphicsStrokeRound);
-  presetParams.add(pGraphicsBaseMaterial);
-  presetParams.add(pGraphicsStrokeMaterial);
-  presetParams.add(pRenderRecipeId);
-  presetParams.add(pMergeEventId);
-  presetParams.add(pSceneLayoutId);
-  presetParams.add(pSceneBehaviorId);
-  presetParams.add(pPaperShadowEnable);
-  presetParams.add(pPaperShadowLift);
-  presetParams.add(pPaperShadowAngle);
-  presetParams.add(pPaperShadowOpacity);
-  presetParams.add(pBackgroundGradientEnable);
-  presetParams.add(pBackgroundGradientDepth);
-  presetParams.add(pBackgroundGradientSpeed);
-
-  // 読み込んだプリセットとの差分だけを監視する。Preset Nameや入力モードは
-  // presetParamsに含まれないため、保存名の編集中やRealtime切り替えでは
-  // Modified扱いにならない。
-  presetParameterChangedListener =
-      presetParams.parameterChangedE().newListener(
-          [this](ofAbstractParameter &) { updatePresetDirtyState(); });
+  guiParams.add(pAutoCycle);
+  guiParams.add(pCycleSeconds);
+  guiParams.add(pTransitionSeconds);
+  guiParams.add(pTransitionWindowSeconds);
 }
+
 
 //--------------------------------------------------------------
 void ofApp::loadGuiSettings() {
@@ -587,9 +506,27 @@ void ofApp::loadGuiSettings() {
   if (!ofFile(settingsPath, ofFile::Reference).exists()) return;
 
   ofJson settings = ofLoadJson(settingsPath);
+  std::string savedVersion;
+  if (settings.is_object() && settings.contains("ControlsSettings") &&
+      settings["ControlsSettings"].is_object()) {
+    const auto &controls = settings["ControlsSettings"];
+    const auto found = controls.find(kControlsDefaultsVersionKey);
+    if (found != controls.end() && found->is_string()) savedVersion = *found;
+  }
+  if (savedVersion != kControlsDefaultsVersion) {
+    // 古い初期値の設定は読み込まず、コード内の初期値で上書きする。
+    const auto backupPath =
+        ofFilePath::join(settingsDirectoryPath(), "controls.backup.json");
+    ofFile::copyFromTo(settingsPath, backupPath, false, true);
+    saveGuiSettings();
+    ofLogNotice("ofApp") << "Controlsの設定を初期値 (" << kControlsDefaultsVersion
+                         << ") で上書きしました。元の設定: " << backupPath;
+    return;
+  }
   if (settings.is_object()) {
     migrateLegacyScaleKey(settings);
     migrateLegacyPersonConfidenceKey(settings);
+    migrateLegacyAutoCycleKeys(settings);
     isLoadingGuiSettings = true;
     ofDeserialize(settings, guiParams);
     isLoadingGuiSettings = false;
@@ -597,30 +534,15 @@ void ofApp::loadGuiSettings() {
 }
 
 //--------------------------------------------------------------
-// 値が変わるたびに書くと、スライダーのドラッグ中に毎フレーム書き込んで
-// カクつくため、ここでは印だけ付け、最後の変更から少し待って update() でまとめて書く。
 void ofApp::saveGuiSettings() const {
   if (isLoadingGuiSettings) return;
-  guiSettingsDirty = true;
-  guiSettingsDirtySinceMs = ofGetElapsedTimeMillis();
-}
 
-void ofApp::flushGuiSettings(bool force) const {
-  if (!guiSettingsDirty) return;
-  if (!force &&
-      ofGetElapsedTimeMillis() - guiSettingsDirtySinceMs < kGuiSettingsSaveDelayMs) {
-    return;
-  }
-  guiSettingsDirty = false;
-  writeGuiSettings();
-}
-
-void ofApp::writeGuiSettings() const {
   const auto settingsDirectory = settingsDirectoryPath();
   ofDirectory::createDirectory(settingsDirectory, false, true);
 
   ofJson settings;
   ofSerialize(settings, guiParams);
+  settings["ControlsSettings"][kControlsDefaultsVersionKey] = kControlsDefaultsVersion;
   const auto settingsPath = ofFilePath::join(settingsDirectory, kControlsFileName);
   if (!ofSavePrettyJson(settingsPath, settings)) {
     ofLogError("ofApp") << "GUI設定を保存できませんでした: " << settingsPath;
@@ -632,7 +554,6 @@ void ofApp::exit() {
   finishRealtimeDetection(false);
   soundOscSender.stop();
   saveGuiSettings();
-  flushGuiSettings(true);
 }
 
 //--------------------------------------------------------------
@@ -649,203 +570,6 @@ int ofApp::getDefaultCameraIndex() const {
     }
   }
   return 0;
-}
-
-//--------------------------------------------------------------
-void ofApp::discoverPresetFiles() {
-  presetPaths.clear();
-
-  // 同名の場合は後から走査するユーザー保存版を優先する。
-  // 配布.app内のプリセットは読み取り専用として扱い、GUIから作成したものは
-  // Application Support/presets に保存してアプリ更新後も残す。
-  const vector<string> directories = {
-      ofToDataPath("presets", true),
-      ofToDataPath("", true),
-      userPresetDirectoryPath(),
-  };
-  std::map<std::string, std::string> pathsByLowerFileName;
-  for (const auto &directoryPath : directories) {
-    ofDirectory directory(directoryPath);
-    if (!directory.exists()) continue;
-    removeObsoletePresetFiles(directoryPath);
-    directory.allowExt("json");
-    directory.listDir();
-    for (const auto &file : directory.getFiles()) {
-      pathsByLowerFileName[lowerCase(file.getFileName())] =
-          file.getAbsolutePath();
-    }
-  }
-  for (const auto &entry : pathsByLowerFileName) {
-    presetPaths.push_back(entry.second);
-  }
-  std::sort(presetPaths.begin(), presetPaths.end());
-}
-
-//--------------------------------------------------------------
-int ofApp::findPresetIndexByFileName(const string &fileName) const {
-  const string targetName = lowerCase(fileName);
-  for (size_t index = 0; index < presetPaths.size(); ++index) {
-    if (lowerCase(ofFilePath::getFileName(presetPaths[index])) == targetName) {
-      return static_cast<int>(index);
-    }
-  }
-  return -1;
-}
-
-//--------------------------------------------------------------
-void ofApp::updatePresetDirtyState() {
-  if (isLoadingGuiSettings || !hasLoadedPresetSnapshot) return;
-
-  ofJson currentPreset;
-  ofSerialize(currentPreset, presetParams);
-  const bool isDirtyNow = currentPreset != loadedPresetSnapshot;
-  if (isDirtyNow == presetIsDirty) return;
-
-  presetIsDirty = isDirtyNow;
-  pPresetStatus = presetIsDirty ? "Modified *" : "Preset loaded";
-}
-
-//--------------------------------------------------------------
-void ofApp::captureLoadedPresetSnapshot() {
-  loadedPresetSnapshot = ofJson();
-  ofSerialize(loadedPresetSnapshot, presetParams);
-  hasLoadedPresetSnapshot = true;
-  presetIsDirty = false;
-}
-
-//--------------------------------------------------------------
-void ofApp::clearLoadedPresetSnapshot() {
-  loadedPresetSnapshot = ofJson();
-  hasLoadedPresetSnapshot = false;
-  presetIsDirty = false;
-}
-
-//--------------------------------------------------------------
-void ofApp::onRevertPresetPressed() {
-  if (!hasLoadedPresetSnapshot || loadedPresetFileName.empty()) {
-    pPresetStatus = "No preset to revert";
-    return;
-  }
-
-  try {
-    isLoadingGuiSettings = true;
-    ofDeserialize(loadedPresetSnapshot, presetParams);
-    isLoadingGuiSettings = false;
-    applyVideoColorMode();
-    rebuildGuiPanel();
-    presetIsDirty = false;
-    pPresetName = loadedPresetFileName;
-    pPresetStatus = "Preset reverted";
-    saveGuiSettings();
-    ofLogNotice("ofApp") << "プリセット読込時の値へ戻しました: "
-                          << loadedPresetFileName;
-  } catch (const std::exception &error) {
-    isLoadingGuiSettings = false;
-    pPresetStatus = "Preset revert failed";
-    ofLogError("ofApp") << "プリセットを元に戻せませんでした: "
-                         << loadedPresetFileName << " (" << error.what()
-                         << ")";
-  }
-}
-
-//--------------------------------------------------------------
-void ofApp::onSavePresetPressed() {
-  string fileName;
-  string validationError;
-  if (!normalizePresetFileName(pPresetName.get(), fileName, validationError)) {
-    pPresetStatus = validationError;
-    ofLogWarning("ofApp") << "プリセットを保存できません: " << validationError;
-    return;
-  }
-
-  const int existingIndex = findPresetIndexByFileName(fileName);
-  const bool overwritingLoadedPreset =
-      !loadedPresetFileName.empty() &&
-      lowerCase(fileName) == lowerCase(loadedPresetFileName);
-  if (existingIndex >= 0 && !overwritingLoadedPreset) {
-    pPresetStatus = "Name already exists - load it before overwrite";
-    ofLogWarning("ofApp")
-        << "同名プリセットが既にあります。上書きするには先に読み込んでください: "
-        << fileName;
-    return;
-  }
-
-  const string presetDirectory = userPresetDirectoryPath();
-  if (!ofDirectory::createDirectory(presetDirectory, false, true)) {
-    pPresetStatus = "Could not create preset folder";
-    ofLogError("ofApp") << "プリセット保存先を作成できませんでした: "
-                         << presetDirectory;
-    return;
-  }
-
-  ofJson preset;
-  ofSerialize(preset, presetParams);
-  const string presetPath = ofFilePath::join(presetDirectory, fileName);
-  if (!ofSavePrettyJson(presetPath, preset)) {
-    pPresetStatus = "Preset save failed";
-    ofLogError("ofApp") << "プリセットを保存できませんでした: " << presetPath;
-    return;
-  }
-
-  loadedPresetFileName = fileName;
-  pPresetName = fileName;
-  discoverPresetFiles();
-  pPresetIndex.setMax(static_cast<int>(presetPaths.size()));
-  const int savedIndex = findPresetIndexByFileName(fileName);
-  if (savedIndex >= 0) {
-    pPresetIndex.setWithoutEventNotifications(savedIndex);
-  }
-  captureLoadedPresetSnapshot();
-  pPresetStatus = overwritingLoadedPreset ? "Preset overwritten" : "Preset created";
-  rebuildGuiPanel();
-  ofLogNotice("ofApp")
-      << (overwritingLoadedPreset ? "プリセットを上書きしました: "
-                                  : "プリセットを新規作成しました: ")
-      << presetPath;
-}
-
-//--------------------------------------------------------------
-void ofApp::onPresetIndexChanged(int &index) {
-  if (index < 0 || static_cast<size_t>(index) >= presetPaths.size()) {
-    pPresetName = "";
-    pPresetStatus = "No preset selected";
-    loadedPresetFileName.clear();
-    clearLoadedPresetSnapshot();
-    return;
-  }
-
-  const string presetPath = presetPaths[static_cast<size_t>(index)];
-  try {
-    ofJson preset = ofLoadJson(presetPath);
-    if (!preset.is_object()) {
-      loadedPresetFileName.clear();
-      clearLoadedPresetSnapshot();
-      pPresetStatus = "Preset load failed";
-      ofLogWarning("ofApp") << "プリセットはJSONオブジェクトである必要があります: " << presetPath;
-      return;
-    }
-
-    migrateLegacyScaleKey(preset);
-    migrateLegacyPersonConfidenceKey(preset);
-    isLoadingGuiSettings = true;
-    ofDeserialize(preset, presetParams);
-    isLoadingGuiSettings = false;
-    applyVideoColorMode();
-    loadedPresetFileName = ofFilePath::getFileName(presetPath);
-    pPresetName = loadedPresetFileName;
-    captureLoadedPresetSnapshot();
-    pPresetStatus = "Preset loaded";
-    rebuildGuiPanel();
-    saveGuiSettings();
-    ofLogNotice("ofApp") << "プリセットを読み込みました: " << pPresetName.get();
-  } catch (const std::exception &error) {
-    isLoadingGuiSettings = false;
-    loadedPresetFileName.clear();
-    clearLoadedPresetSnapshot();
-    pPresetStatus = "Preset load failed";
-    ofLogError("ofApp") << "プリセットを読み込めませんでした: " << presetPath
-                         << " (" << error.what() << ")";
-  }
 }
 
 //--------------------------------------------------------------
@@ -870,11 +594,10 @@ void ofApp::rebuildGuiPanel() {
   gui.add(pProjectionSafeArea);
   gui.add(pRealtime);
   if (!realtimeMode) gui.add(&openVideoButton);
-  gui.add(pPresetIndex);
-  gui.add(pPresetName);
-  gui.add(&savePresetButton);
-  gui.add(&revertPresetButton);
-  gui.add(pPresetStatus);
+  gui.add(pAutoCycle);
+  gui.add<float>(pCycleSeconds);
+  gui.add<float>(pTransitionSeconds);
+  gui.add<float>(pTransitionWindowSeconds);
 
   // ★追加: Realtime(カメラ)モードの時だけカメラ選択UI・左右反転トグルを表示
   if (realtimeMode) {
@@ -895,7 +618,7 @@ void ofApp::rebuildGuiPanel() {
   if (!realtimeMode) gui.add(pVideoPlaybackSpeed);
   gui.add(pLooseContour);
   gui.add(pLooseContourStrength);
-  gui.add<float>(pColorUpdateIntervalSec);
+  gui.add<float>(pMinPersonSize);
   if (!realtimeMode) {
     gui.add(pVideoColorLock);
     gui.add(pVideoPeopleCount);
@@ -918,9 +641,6 @@ void ofApp::rebuildGuiPanel() {
   gui.add<float>(pPaperShadowLift);
   gui.add<float>(pPaperShadowAngle);
   gui.add<float>(pPaperShadowOpacity);
-  gui.add(pBackgroundGradientEnable);
-  gui.add<float>(pBackgroundGradientDepth);
-  gui.add<float>(pBackgroundGradientSpeed);
   gui.add(pSoundOscEnable);
   gui.add(pSoundOscSlots);
   gui.add(pSoundOscTarget);
@@ -1062,18 +782,18 @@ void ofApp::onLooseContourStrengthChanged(float &value) {
 }
 
 //--------------------------------------------------------------
+void ofApp::onMinPersonSizeChanged(float &value) {
+  if (humanGraphicsScene) humanGraphicsScene->minPersonSize = value;
+  saveGuiSettings();
+}
+
+//--------------------------------------------------------------
 void ofApp::onAspectRatioChanged(float &value) {
   finishRealtimeDetection(false);
   personSegmenter.aspectRatioPercent = value;
   // Videoが一時停止中でも、次のupdateで保持中の元フレームから検出し直す。
   videoProcessor.requestReprocess();
   lastRealtimeProcessMs = 0;
-  saveGuiSettings();
-}
-
-//--------------------------------------------------------------
-void ofApp::onColorUpdateIntervalChanged(float &value) {
-  colorUpdateIntervalMs = static_cast<uint64_t>(value * 1000.0f);
   saveGuiSettings();
 }
 
@@ -1218,9 +938,6 @@ void ofApp::applyLookSettings() {
     humanGraphicsScene->paperShadow.lift = pPaperShadowLift.get();
     humanGraphicsScene->paperShadow.angleDegrees = pPaperShadowAngle.get();
     humanGraphicsScene->paperShadow.opacity = pPaperShadowOpacity.get();
-    humanGraphicsScene->backgroundGradient.enabled = pBackgroundGradientEnable.get();
-    humanGraphicsScene->backgroundGradient.depth = pBackgroundGradientDepth.get();
-    humanGraphicsScene->backgroundGradient.speed = pBackgroundGradientSpeed.get();
 }
 void ofApp::onGraphicsStrokeRoundChanged(bool &value) {
     if (humanGraphicsScene) {
@@ -1245,8 +962,7 @@ void ofApp::onGraphicsStrokeMaterialChanged(int &value) {
 
 void ofApp::onRenderRecipeIdChanged(string &value) {
     const bool isKnownRecipe =
-        value == gux::StandardRenderRecipe::RecipeId ||
-        value == gux::MixRenderRecipe::RecipeId;
+        value == gux::StandardRenderRecipe::RecipeId;
     const std::string activeId = isKnownRecipe
         ? value : std::string(gux::StandardRenderRecipe::RecipeId);
     if (!isKnownRecipe) {
@@ -1967,9 +1683,6 @@ void ofApp::onCameraIndexChanged(int &index) {
   if (index < 0 || index >= static_cast<int>(cameraDevices.size())) return;
   // カメラの名前表示を更新
   pCameraName = cameraDevices[index].deviceName;
-  if (!keepSavedCameraKeys || pCameraKey.get().empty()) {
-    pCameraKey = cameraKey(cameraDevices[index]);
-  }
   syncCameraChoices();
   applyCameraSelection();
   saveGuiSettings();
@@ -1977,7 +1690,6 @@ void ofApp::onCameraIndexChanged(int &index) {
 
 void ofApp::onCamera2IndexChanged(int &index) {
   if (index < 0 || index >= static_cast<int>(cameraDevices.size())) return;
-  pCamera2Key = cameraKey(cameraDevices[index]);
   syncCameraChoices();
   applyCameraSelection();
   saveGuiSettings();
@@ -1991,77 +1703,6 @@ std::string ofApp::cameraDisplayName(const ofVideoDevice &device) {
     name.erase(at, lrm.size());
   }
   return ofToString(device.id) + ": " + name;
-}
-
-// 機器の固有ID (AVFoundation の uniqueID = ofVideoDevice::serialID)。
-// 取れない環境では名前を使う。同じ型番2台でも uniqueID は別になる。
-std::string ofApp::cameraKey(const ofVideoDevice &device) {
-  if (!device.serialID.empty()) return "id:" + device.serialID;
-  std::string name = device.deviceName;
-  const std::string lrm = "\xE2\x80\x8E";
-  for (size_t at = name.find(lrm); at != std::string::npos; at = name.find(lrm)) {
-    name.erase(at, lrm.size());
-  }
-  return "name:" + name;
-}
-
-int ofApp::findCameraByKey(const std::string &key) const {
-  if (key.empty()) return -1;
-  for (size_t i = 0; i < cameraDevices.size(); ++i) {
-    if (cameraKey(cameraDevices[i]) == key) return static_cast<int>(i);
-  }
-  return -1;
-}
-
-// controls.json のキーから、今回の起動でのカメラ番号を決め直す。
-// (リスナー登録前に呼ぶので、ここでの set() ではカメラは開かない)
-//   - キーが見つかった      → その番号を使う
-//   - キーがあるが見つからない → カメラ1は内蔵カメラ、カメラ2はカメラ1と共有にする
-//                              (別のカメラ(iPhoneなど)を勝手に使わない)
-//   - キーが無い(古い設定)   → 保存済みの番号をそのまま使う(範囲外なら内蔵カメラ)
-void ofApp::resolveSavedCameras() {
-  for (size_t i = 0; i < cameraDevices.size(); ++i) {
-    ofLogNotice("ofApp") << "Camera " << i << " key: " << cameraKey(cameraDevices[i]);
-  }
-  if (cameraDevices.empty()) return;
-  const int count = static_cast<int>(cameraDevices.size());
-  const auto inRange = [count](int index) { return index >= 0 && index < count; };
-
-  int camera1 = pCameraIndex.get();
-  if (!pCameraKey.get().empty()) {
-    const int found = findCameraByKey(pCameraKey.get());
-    if (found >= 0) {
-      camera1 = found;
-    } else {
-      camera1 = getDefaultCameraIndex();
-      ofLogWarning("ofApp") << "保存したカメラ1が見つかりません (" << pCameraKey.get()
-                            << ")。内蔵カメラを使います。";
-    }
-  } else if (!inRange(camera1)) {
-    camera1 = getDefaultCameraIndex();
-  }
-
-  int camera2 = pCamera2Index.get();
-  if (!pCamera2Key.get().empty()) {
-    const int found = findCameraByKey(pCamera2Key.get());
-    if (found >= 0) {
-      camera2 = found;
-    } else {
-      camera2 = camera1;
-      ofLogWarning("ofApp") << "保存したカメラ2が見つかりません (" << pCamera2Key.get()
-                            << ")。カメラ1の映像を共有します。";
-    }
-  } else if (!inRange(camera2)) {
-    camera2 = camera1;
-  }
-
-  pCameraIndex.set(camera1);
-  pCamera2Index.set(camera2);
-  // 見つからなかったキーは書き換えない。本番機でカメラの接続が起動に
-  // 間に合わなかった場合でも、次の起動で元のカメラに戻れるようにする。
-  // (キーはControlsでカメラを選び直した時だけ更新する)
-  if (pCamera2Key.get().empty()) pCamera2Key = cameraKey(cameraDevices[camera2]);
-  syncCameraChoices();
 }
 
 // 系統ごとに、認識したカメラを1台ずつトグルにする (起動時のカメラ一覧)。
@@ -2142,13 +1783,165 @@ void ofApp::applyCameraSelection() {
 }
 
 //--------------------------------------------------------------
+void ofApp::onAutoCycleChanged(bool &value) {
+  lastCycleSwitchMs = ofGetElapsedTimeMillis();
+  saveGuiSettings();
+}
+void ofApp::onCycleSecondsChanged(float &value) {
+  saveGuiSettings();
+}
+void ofApp::onTransitionSecondsChanged(float &value) {
+  saveGuiSettings();
+}
+
+// Fill (Base) と Stroke のトグルを入れ替える。
+// Fill表示中なら Stroke だけに、それ以外なら Fill だけにする。
+// ほかの設定はControlsの値のまま。
+void ofApp::applyNextCycleLook() {
+  const bool showFill = !pGraphicsEnableBase.get();
+  pGraphicsEnableBase = showFill;
+  pGraphicsEnableStroke = !showFill;
+}
+
+// Auto Cycle がオンの間、Cycle Interval ごとに Fill と Stroke を切り替える。
+void ofApp::updateAutoCycle() {
+  if (cycleTransitionActive) return;  // 演出中は次の切り替えを始めない
+  if (!pAutoCycle.get()) return;
+  if (isExportingMovie || isExportingImageSequence) return;
+  const uint64_t now = ofGetElapsedTimeMillis();
+  const uint64_t intervalMs = static_cast<uint64_t>(
+      std::max(1.0f, pCycleSeconds.get()) * 1000.0f);
+  if (now - lastCycleSwitchMs < intervalMs) return;
+
+  lastCycleSwitchMs = now;
+  if (pTransitionSeconds.get() > 0.0f) {
+    startCycleTransition();
+  } else {
+    applyNextCycleLook();
+  }
+}
+
+// 切り替えの演出を始める。今の見た目を「前の見た目」の Scene として複製し、
+// 本体のトグルはすぐ切り替える。今いる人それぞれに、
+// Transition Window の中でランダムな開始時刻を割り振る。
+void ofApp::startCycleTransition() {
+  if (!humanGraphicsScene) {
+    applyNextCycleLook();
+    return;
+  }
+  const float duration = std::max(0.01f, pTransitionSeconds.get());
+  const float latestStart =
+      std::max(0.0f, pTransitionWindowSeconds.get() - duration);
+
+  std::shared_ptr<HumanGraphicsScene> mains[2] = {humanGraphicsScene,
+                                                  humanGraphicsScene2};
+  cycleTransitionEndSeconds = 0.0f;
+  for (int band = 0; band < 2; ++band) {
+    transitionStartSeconds[band].clear();
+    outgoingSceneActive[band] = false;
+    if (!mains[band] || (band == 1 && !dualOutputActive())) continue;
+    // 2回目以降は代入で中身だけ写す (影のFBOなどは作り直さず使い回す)。
+    if (!outgoingScenes[band]) {
+      outgoingScenes[band] = std::make_shared<HumanGraphicsScene>(*mains[band]);
+    } else {
+      *outgoingScenes[band] = *mains[band];
+    }
+    outgoingScenes[band]->offsetScale = 0.0f;  // 割り振りのない人(新しく来た人)は出さない
+    outgoingScenes[band]->setHoldColors(true);
+    outgoingSceneActive[band] = true;
+    mains[band]->setHoldColors(true);
+    mains[band]->setSoundShapesFrozen(true);
+    mains[band]->setMergeSuppressed(true);
+    for (const gux::ObjectId id : mains[band]->trackedIds()) {
+      const float start = ofRandom(0.0f, latestStart);
+      transitionStartSeconds[band][id] = start;
+      cycleTransitionEndSeconds =
+          std::max(cycleTransitionEndSeconds, start + duration);
+    }
+  }
+
+  cycleTransitionActive = true;
+  cycleTransitionStartMs = ofGetElapsedTimeMillis();
+  applyNextCycleLook();  // 本体は新しい見た目になる
+  updateCycleTransition();    // 最初のフレームから割り振りを反映する
+}
+
+namespace {
+// 0→1 をゆっくり始めてゆっくり終える (cubic in-out)。
+float easeInOutCubic(float t) {
+  t = std::clamp(t, 0.0f, 1.0f);
+  return t < 0.5f ? 4.0f * t * t * t
+                  : 1.0f - std::pow(-2.0f * t + 2.0f, 3.0f) * 0.5f;
+}
+}  // namespace
+
+// 人ごとの開始時刻からの経過で、前と新しい見た目の Scene に割り振る。
+//   開始前 : 前の見た目の形のまま (新しい見た目では隠す)
+//   開始後 : 前の見た目の形はすぐ消し、新しい見た目の形が現れていく
+//            (塗りは左下から色面が入り、線は一筆書きのようになぞる)。
+//            現れる長さは Transition (s)。
+void ofApp::updateCycleTransition() {
+  if (!cycleTransitionActive) return;
+  const float elapsed =
+      (ofGetElapsedTimeMillis() - cycleTransitionStartMs) / 1000.0f;
+  if (elapsed >= cycleTransitionEndSeconds) {
+    finishCycleTransition();
+    return;
+  }
+
+  const float duration = std::max(0.01f, pTransitionSeconds.get());
+  const int baseVertexCount = pVertexCount.get();
+  const float baseScale = pGraphicsOffsetScale.get();
+  std::shared_ptr<HumanGraphicsScene> mains[2] = {humanGraphicsScene,
+                                                  humanGraphicsScene2};
+  for (int band = 0; band < 2; ++band) {
+    if (!outgoingSceneActive[band] || !mains[band] || !outgoingScenes[band]) continue;
+    std::unordered_map<gux::ObjectId, gux::ShapeOverride> hiddenInNew;
+    std::unordered_map<gux::ObjectId, gux::ShapeOverride> shownInOld;
+    std::unordered_map<gux::ObjectId, float> reveal;
+    for (const auto &[id, start] : transitionStartSeconds[band]) {
+      const float p = (elapsed - start) / duration;
+      if (p < 0.0f) {
+        shownInOld[id] = {baseVertexCount, baseScale};
+        hiddenInNew[id] = {baseVertexCount, 0.0f};
+      } else if (p < 1.0f) {
+        reveal[id] = easeInOutCubic(p);
+      }
+    }
+    // 隠す人の組み合わせは開始時刻にしか変わらないので、形の作り直しはその時だけ起きる。
+    mains[band]->setShapeOverrides(std::move(hiddenInNew));
+    mains[band]->setRevealProgress(std::move(reveal));
+    outgoingScenes[band]->setShapeOverrides(std::move(shownInOld));
+  }
+}
+
+void ofApp::finishCycleTransition() {
+  cycleTransitionActive = false;
+  std::shared_ptr<HumanGraphicsScene> mains[2] = {humanGraphicsScene,
+                                                  humanGraphicsScene2};
+  for (int band = 0; band < 2; ++band) {
+    outgoingSceneActive[band] = false;
+    transitionStartSeconds[band].clear();
+    if (!mains[band]) continue;
+    mains[band]->clearShapeOverrides();
+    mains[band]->clearRevealProgress();
+    mains[band]->setMergeSuppressed(false);
+    mains[band]->setHoldColors(false);
+    mains[band]->setSoundShapesFrozen(false);
+  }
+  // 新しい見た目の形への変化を、人の動きとして音へ送らない。
+  soundOscSender.resetMotionBaseline();
+}
+
+//--------------------------------------------------------------
 void ofApp::onFlipHorizontalChanged(bool &value) {
   saveGuiSettings();
 }
 
 //--------------------------------------------------------------
 void ofApp::update() {
-  flushGuiSettings(false);
+  updateAutoCycle();
+  updateCycleTransition();
   if (guiRebuildPending) {
     guiRebuildPending = false;
     rebuildGuiPanel();
@@ -2289,6 +2082,9 @@ void ofApp::update() {
     if (canvasW != lastSceneCanvasWidth || canvasH != lastSceneCanvasHeight) {
       humanGraphicsScene->setCanvasSize(canvasW, canvasH);
       if (humanGraphicsScene2) humanGraphicsScene2->setCanvasSize(canvasW, canvasH);
+      for (auto &scene : outgoingScenes) {
+        if (scene) scene->setCanvasSize(canvasW, canvasH);
+      }
       lastSceneCanvasWidth = canvasW;
       lastSceneCanvasHeight = canvasH;
     }
@@ -2299,9 +2095,17 @@ void ofApp::update() {
   if (currentScene) {
     const HumanContourData &activeData = realtimeMode ? humanData : videoProcessor.humanData;
     currentScene->update(activeData);
+    // 切り替えの演出中は、前のプリセットの Scene にも同じ検出結果を渡す
+    // (同じ状態から同じ入力でトラッキングするので、人のIDも揃う)。
+    if (cycleTransitionActive && outgoingSceneActive[0] && outgoingScenes[0]) {
+      outgoingScenes[0]->update(activeData);
+    }
   }
   if (dualOutputActive() && humanGraphicsScene2) {
     humanGraphicsScene2->update(humanData2);
+    if (cycleTransitionActive && outgoingSceneActive[1] && outgoingScenes[1]) {
+      outgoingScenes[1]->update(humanData2);
+    }
   }
 
   // 人物グラフィックのシーンを表示している間だけ、音へ人物の情報を送る。
@@ -2351,6 +2155,11 @@ void ofApp::draw() {
 
   if (currentScene) {
     currentScene->draw();
+    // 切り替えの演出中は、まだ変わっていない人を前のプリセットで重ねて描く。
+    if (cycleTransitionActive && outgoingSceneActive[0] && outgoingScenes[0] &&
+        currentScene == humanGraphicsScene) {
+      outgoingScenes[0]->draw(false);
+    }
   }
 
   // Dキーが押されている時のみ、デバッグ用HUDを表示
@@ -2405,6 +2214,7 @@ void ofApp::syncSecondPipelineSettings() {
   b.enableMerge = a.enableMerge;
   b.enableLooseContour = a.enableLooseContour;
   b.looseContourStrength = a.looseContourStrength;
+  b.minPersonSize = a.minPersonSize;
   b.offsetSize = a.offsetSize;
   b.offsetScale = a.offsetScale;
   b.offsetJoinType = a.offsetJoinType;
@@ -2413,7 +2223,6 @@ void ofApp::syncSecondPipelineSettings() {
   b.baseMaterialType = a.baseMaterialType;
   b.outlineMaterialType = a.outlineMaterialType;
   b.paperShadow = a.paperShadow;
-  b.backgroundGradient = a.backgroundGradient;
   if (b.renderRecipeId() != a.renderRecipeId()) {
     b.setRenderRecipe(std::string(a.renderRecipeId()));
   }
@@ -2480,6 +2289,9 @@ void ofApp::drawDualOutput() {
     dualBandFbo[i].begin();
     ofClear(background_color, background_color, background_color, 255);
     if (scenes[i]) scenes[i]->draw();
+    if (cycleTransitionActive && outgoingSceneActive[i] && outgoingScenes[i]) {
+      outgoingScenes[i]->draw(false);
+    }
     if (showDebug) drawDebug(i);
     dualBandFbo[i].end();
   }
@@ -2777,12 +2589,6 @@ void ofApp::keyPressed(int key) {
     pVertexCount = std::max(4, pVertexCount.get() - 1);
   } else if (key == ']') {
     pVertexCount = std::min(100, pVertexCount.get() + 1);
-  }
-  // 色の更新頻度 ('-' / '=', 0〜20秒)
-  else if (key == '-' || key == '_') {
-    pColorUpdateIntervalSec = std::max(0.0f, pColorUpdateIntervalSec.get() - 0.5f);
-  } else if (key == '=' || key == '+') {
-    pColorUpdateIntervalSec = std::min(20.0f, pColorUpdateIntervalSec.get() + 0.5f);
   }
 }
 void ofApp::drawGui(ofEventArgs & args) {

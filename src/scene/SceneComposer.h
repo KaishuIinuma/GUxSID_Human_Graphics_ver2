@@ -448,10 +448,6 @@ class SceneComposer {
           mergedPolygons.push_back(std::move(mergedPolygon));
         }
       }
-      // 1つも合体できなかったときは、グループ順ではなく元の順番で返す。
-      // 数が同じだと compose() が「1対1」と見なし、i 番目の形に i 番目の人の
-      // IDを付けるため、順番が変わると人と形の対応がずれる。
-      if (mergedPolygons.size() == targetPolygons.size()) return targetPolygons;
       return mergedPolygons;
     }
 

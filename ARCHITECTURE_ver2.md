@@ -20,7 +20,6 @@ Camera / Video
        -> StandardMergeEvent
   -> SceneLayout
   -> SceneBehavior
-  -> BackgroundGradientPass
   -> PaperShadowPass (shadow of everything below)
   -> RenderRecipe
        -> BasePass
@@ -55,7 +54,7 @@ primary color on the same screen.
 - `sound/`: sends per-person data to the sound app over OSC. It never changes the graphics.
 - `HumanGraphicsScene.*`: connects the stages and translates existing GUI settings into
   stage-specific settings.
-- `ofApp.*`: inputs (camera 1 / camera 2 / video), Controls window, presets,
+- `ofApp.*`: inputs (camera 1 / camera 2 / video), Controls window, Auto Cycle,
   Dual Output, projection margin, and export.
 
 ## Extension points
@@ -76,20 +75,51 @@ reproduces the previous Base-then-Stroke drawing. The
 existing offset algorithm, contact merge behavior, inset-line preservation,
 palette assignment, GUI values, and video export flow are retained.
 
-`MixRenderRecipe` (`mix_render`) draws a palette-colored solid Base first,
-then overlays a solid Stroke using the current background color. Presets select
-the active Recipe through `Recipe_ID`. These two are the only Recipes; an
-unknown ID falls back to `standard_render`.
+`standard_render` is the only Recipe (the former `mix_render` was removed).
+`Recipe_ID` in `controls.json` is kept for future Recipes; any other ID,
+including an old `mix_render`, falls back to `standard_render`.
 
-Presets live in `bin/data/presets/` (`default`, `fill`, `mix_render`,
-`stroke_Poly`, `stroke_Round`). Presets do not store the camera selection or
-`YOLO Input 320`; those are hardware settings kept only in `controls.json`, and
-old presets that still contain them load without changing them.
+There are no preset files. Every Controls value is saved in
+`~/Library/Application Support/GUxSID_Human_Graphics_ver2/controls.json` and
+restored at startup.
+
+`Auto Cycle` (Controls) switches the look every `Cycle Interval (s)` (default
+30 s; about 180 s is planned for the show) by flipping the toggles: when
+`Graphics Base Enable` (fill) is on it switches to Stroke only (`Base` off,
+`Stroke` on), otherwise to Fill only (`Base` on, `Stroke` off). Every other
+setting stays as set in Controls. Old `Preset_*` keys in `controls.json` are
+read once under the new names.
+
+Each automatic switch plays a transition. The toggles change in the Scene
+right away, and a copy of the Scene from just before the switch keeps
+drawing the old look on top. Every person present gets a random start time
+within `Transition Window (s)` (default 0.5 s). At that time the
+person's old shape disappears at once, and the new shape appears over
+`Transition (s)` (default 2 s, cubic in-out; 0 switches instantly) through
+`SceneObject::reveal` (0–1): fills are revealed by a diagonal wipe from the
+bottom-left (the tessellated fill is clipped by a moving line, so gradients
+keep their colors), and strokes are drawn like a single pen line, starting at
+the outline point nearest the bottom-left and going round. The paper shadow follows because it uses the same drawing.
+Before their start time people are hidden in the new Scene with per-person
+`ShapeOverride` (scale 0); the old Scene shows only people who have not
+started. People who appear during the transition show the new look at once.
+During the transition the new Scene does not merge shapes (they merge normally
+afterwards), colors are held (no reshuffle when the visible count
+changes), the sound app keeps receiving the pre-transition outlines and
+groups (moved with each person), and the motion baseline is reset when it
+ends, so the change does not trigger motion, merge or split sounds. Changing
+the toggles by hand switches instantly.
 
 `ObjectTracker` matches people by nearest centroid within 20% of the canvas
 height. A track that has not been seen for 1 second is dropped, even while the
 detection stays unchanged (for example, nobody in view), so an old ID is not
 reused for a different person.
+
+People who appear small (far from the camera) are not drawn and send no sound.
+`Min Person Size` (Controls, saved in `controls.json`) is the
+longer side of a person's contour bounding box as a fraction of the canvas
+height; 0 draws everyone. A person already shown stays until they drop below
+85% of the threshold, so people near the threshold do not flicker.
 
 ## Person detection
 
@@ -130,8 +160,7 @@ count or order.
 `render/BridgeStrokePass` (GUI: `Graphics Bridge Stroke Enable`) draws one open
 gray stroke that connects the centers of all objects on screen, ordered left
 to right by X (bottom first when X is equal), so the line never moves back to
-the left. It is independent of the Recipe, so it works with every Recipe and
-preset. It is drawn on top of the objects and is included in the paper shadow.
+the left. It is independent of the Recipe, so it works with every Recipe. It is drawn on top of the objects and is included in the paper shadow.
 Width is `max(2, Stroke Weight × 0.2)`. In Dual Output the two bands are joined
 into one line (see below).
 
@@ -145,16 +174,6 @@ sheet an edge, and a wide soft ambient shadow gives it height. Lengths scale
 with canvas height, so preview and export match. Shadow alpha is composited
 separately so transparent export keeps it. GUI: `Paper Shadow`, `Paper Shadow
 Lift`, `Paper Shadow Angle` (0 = right, 90 = down), `Paper Shadow Opacity`.
-
-## Background gradient
-
-`render/BackgroundGradientPass` keeps the background from being a flat fill.
-Over the background color it draws four soft, blurred ellipses of off-white
-(about 230–240 on a 255 background) that drift slowly, like a mesh gradient.
-Overlaps are combined so they never get much darker than one ellipse, and
-sub-step noise prevents banding. Drift uses the Scene's elapsed time, so video
-export reproduces it; transparent export leaves the background out. GUI:
-`Background Gradient`, `Background Gradient Depth`, `Background Gradient Speed`.
 
 ## Projection margin
 
@@ -196,14 +215,6 @@ fit when the window is not 4K.
 - Debug drawing (`D`) shows each band's own camera and detections.
 
 ## Settings
-
-Cameras are saved by device key (`Camera Key` / `Camera 2 Key` in
-controls.json: the AVFoundation unique ID, or the name if none), not by index,
-because macOS camera indexes change with Continuity Camera (iPhone) and USB
-order. At startup the key is looked up again; if camera 1 is missing the
-built-in camera is used, and if camera 2 is missing it shares camera 1. A
-missing key is kept, so the camera is used again when it is connected at the
-next start.
 
 ver2 stores its GUI settings and crash marker under
 `Application Support/GUxSID_Human_Graphics_ver2`, independently from the

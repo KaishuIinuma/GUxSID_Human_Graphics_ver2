@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <vector>
 
 namespace gux {
@@ -51,23 +52,141 @@ class ShapePainter {
     return cache.back().mesh;
   }
 
+  // ---- 現れる演出 (SceneObject::reveal) 用 ----
+
+  // 左下から右上へ進む向き (画面は y が下向き)。
+  static glm::vec2 wipeDirection() { return glm::normalize(glm::vec2(1.0f, -1.0f)); }
+
+  // 塗りのメッシュ (三角形) を、wipeDirection への射影が limit 以下の側だけ残して切り取る。
+  // 色が付いていれば切り口の色も補間する。
+  static ofMesh clipMeshForWipe(const ofMesh& source, float reveal,
+                                const ofPolyline& polygon) {
+    const glm::vec2 direction = wipeDirection();
+    float minimum = std::numeric_limits<float>::max();
+    float maximum = std::numeric_limits<float>::lowest();
+    for (const auto& point : polygon) {
+      const float d = glm::dot(glm::vec2(point.x, point.y), direction);
+      minimum = std::min(minimum, d);
+      maximum = std::max(maximum, d);
+    }
+    const float limit = minimum + (maximum - minimum) * reveal;
+
+    ofMesh result;
+    result.setMode(OF_PRIMITIVE_TRIANGLES);
+    const auto& vertices = source.getVertices();
+    const auto& colors = source.getColors();
+    const bool hasColors = colors.size() == vertices.size();
+    const auto& indices = source.getIndices();
+    const size_t count = source.hasIndices() ? indices.size() : vertices.size();
+    const auto indexAt = [&](size_t i) {
+      return source.hasIndices() ? static_cast<size_t>(indices[i]) : i;
+    };
+    struct Corner { glm::vec3 position; ofFloatColor color; float distance; };
+    const auto add = [&](const Corner& c) {
+      result.addVertex(c.position);
+      if (hasColors) result.addColor(c.color);
+    };
+    for (size_t t = 0; t + 2 < count; t += 3) {
+      Corner corners[3];
+      for (int k = 0; k < 3; ++k) {
+        const size_t index = indexAt(t + k);
+        corners[k].position = vertices[index];
+        corners[k].color = hasColors ? colors[index] : ofFloatColor::white;
+        corners[k].distance =
+            glm::dot(glm::vec2(vertices[index].x, vertices[index].y), direction) - limit;
+      }
+      // Sutherland-Hodgman で1つの半平面に対して切る (結果は最大4角形)。
+      Corner kept[4];
+      int keptCount = 0;
+      for (int k = 0; k < 3; ++k) {
+        const Corner& a = corners[k];
+        const Corner& b = corners[(k + 1) % 3];
+        const bool aIn = a.distance <= 0.0f;
+        const bool bIn = b.distance <= 0.0f;
+        if (aIn) kept[keptCount++] = a;
+        if (aIn != bIn) {
+          const float u = a.distance / (a.distance - b.distance);
+          Corner cut;
+          cut.position = a.position + (b.position - a.position) * u;
+          cut.color = a.color.getLerped(b.color, u);
+          cut.distance = 0.0f;
+          kept[keptCount++] = cut;
+        }
+      }
+      for (int k = 1; k + 1 < keptCount; ++k) {
+        add(kept[0]);
+        add(kept[k]);
+        add(kept[k + 1]);
+      }
+    }
+    return result;
+  }
+
+  // 閉じた輪郭を、左下に一番近い頂点から一周なぞった時の、reveal (0〜1) までの道のり。
+  static std::vector<glm::vec2> revealPath(const ofPolyline& polygon, float reveal) {
+    std::vector<glm::vec2> path;
+    const size_t n = polygon.size();
+    if (n < 2) return path;
+    const glm::vec2 direction = wipeDirection();
+    size_t start = 0;
+    float best = std::numeric_limits<float>::max();
+    for (size_t i = 0; i < n; ++i) {
+      const float d = glm::dot(glm::vec2(polygon[i].x, polygon[i].y), direction);
+      if (d < best) { best = d; start = i; }
+    }
+    float total = 0.0f;
+    for (size_t i = 0; i < n; ++i) {
+      total += glm::distance(glm::vec2(polygon[i]), glm::vec2(polygon[(i + 1) % n]));
+    }
+    float remaining = total * std::clamp(reveal, 0.0f, 1.0f);
+    glm::vec2 current = polygon[start];
+    path.push_back(current);
+    for (size_t step = 0; step < n && remaining > 0.0f; ++step) {
+      const glm::vec2 next = polygon[(start + step + 1) % n];
+      const float length = glm::distance(current, next);
+      if (length >= remaining) {
+        path.push_back(current + (next - current) * (remaining / std::max(length, 1e-6f)));
+        break;
+      }
+      path.push_back(next);
+      remaining -= length;
+      current = next;
+    }
+    return path;
+  }
+
   void drawStroke(const ofPolyline& polygon, const ofColor& color,
                   float strokeWeight, StrokeJoinType joinType) const {
-    if (polygon.size() < 3 || !std::isfinite(strokeWeight) || strokeWeight <= 0.0f) return;
+    if (polygon.size() < 3) return;
+    drawStrokePath(polygon.getVertices(), true, color, strokeWeight, joinType);
+  }
+
+  // 閉じた輪郭 (closed=true) か、途中で止まる線 (closed=false) を描く。
+  // 途中で止まる線の端は、Round なら丸く、Straight なら切りっぱなしにする。
+  template <typename Point>
+  void drawStrokePath(const std::vector<Point>& points, bool closed,
+                      const ofColor& color, float strokeWeight,
+                      StrokeJoinType joinType) const {
+    const size_t n = points.size();
+    if (n < 2 || (closed && n < 3) || !std::isfinite(strokeWeight) ||
+        strokeWeight <= 0.0f) {
+      return;
+    }
+    const auto polygon = [&points](size_t i) { return glm::vec2(points[i].x, points[i].y); };
     ofSetColor(color);
     ofFill();
 
-    const size_t n = polygon.size();
     const float halfWeight = strokeWeight * 0.5f;
+    const size_t segmentCount = closed ? n : n - 1;
 
     // セグメント矩形を三角形メッシュにまとめる。
     ofMesh segmentMesh;
     segmentMesh.setMode(OF_PRIMITIVE_TRIANGLES);
     segmentMesh.getVertices().reserve(n * 6); // 各セグメント = 2三角形 = 6頂点
 
-    for (size_t i = 0; i < n; ++i) {
-      const glm::vec2 p1 = polygon[i];
-      const glm::vec2 p2 = polygon[(i + 1) % n];
+    for (size_t i = 0; i < segmentCount; ++i) {
+      const glm::vec2 p1 = polygon(i);
+      const glm::vec2 p2 = polygon((i + 1) % n);
       const glm::vec2 direction = p2 - p1;
       const float length = glm::length(direction);
       if (length <= 0.0f) continue;
@@ -93,7 +212,7 @@ class ShapePainter {
       constexpr int circleSegments = 16;
       jointMesh.getVertices().reserve(n * circleSegments * 3);
       for (size_t i = 0; i < n; ++i) {
-        const glm::vec2 center = polygon[i];
+        const glm::vec2 center = polygon(i);
         for (int j = 0; j < circleSegments; ++j) {
           const float a0 = TWO_PI * j / circleSegments;
           const float a1 = TWO_PI * (j + 1) / circleSegments;
@@ -110,9 +229,10 @@ class ShapePainter {
       miterMesh.getVertices().reserve(n * 12);
 
       for (size_t i = 0; i < n; ++i) {
-        const glm::vec2 p1 = polygon[i];
-        const glm::vec2 p2 = polygon[(i + 1) % n];
-        const glm::vec2 previous = polygon[(i - 1 + n) % n];
+        if (!closed && (i == 0 || i + 1 == n)) continue;  // 線の端には角を付けない
+        const glm::vec2 p1 = polygon(i);
+        const glm::vec2 p2 = polygon((i + 1) % n);
+        const glm::vec2 previous = polygon((i - 1 + n) % n);
         const glm::vec2 direction = p2 - p1;
         const float length = glm::length(direction);
 

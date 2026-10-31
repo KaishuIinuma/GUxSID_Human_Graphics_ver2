@@ -15,6 +15,7 @@
 		7BF4A5BF305E5EED000E3B60 /* PersonSegmenter.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7BF4A5BE305E5EED000E3B60 /* PersonSegmenter.cpp */; };
 		7BF4A5C1305E5EED000E3B60 /* video_Processing.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7BF4A5C0305E5EED000E3B60 /* video_Processing.cpp */; };
 		7BF4A5C4305E664C000E3B60 /* CameraAuthorization.mm in Sources */ = {isa = PBXBuildFile; fileRef = 7BF4A5C3305E664C000E3B60 /* CameraAuthorization.mm */; };
+		5CA3E7A1000000000000A003 /* StableCameraGrabber.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5CA3E7A1000000000000A002 /* StableCameraGrabber.mm */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		CDA410800000000000000003 /* CoreMLYoloSession.mm in Sources */ = {isa = PBXBuildFile; fileRef = CDA410800000000000000002 /* CoreMLYoloSession.mm */; };
 		"7E86742D-DED6-4C1B-998C-4D3903DAA899" /* ofxCvHaarFinder.cpp in Sources */ = {isa = PBXBuildFile; fileRef = "26B09A11-A834-4BE1-8D45-954647C95807" /* ofxCvHaarFinder.cpp */; };
 		"8282573B-2114-44E8-80BF-DC5492D8741F" /* ofxCvColorImage.cpp in Sources */ = {isa = PBXBuildFile; fileRef = "7A387400-4B51-4727-A993-86DCA5D4B6BF" /* ofxCvColorImage.cpp */; };
@@ -552,6 +553,8 @@
 		7BF4A5C0305E5EED000E3B60 /* video_Processing.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = video_Processing.cpp; sourceTree = "<group>"; };
 		7BF4A5C2305E664C000E3B60 /* CameraAuthorization.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CameraAuthorization.h; sourceTree = "<group>"; };
 		7BF4A5C3305E664C000E3B60 /* CameraAuthorization.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = CameraAuthorization.mm; sourceTree = "<group>"; };
+		5CA3E7A1000000000000A001 /* StableCameraGrabber.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = StableCameraGrabber.h; sourceTree = "<group>"; };
+		5CA3E7A1000000000000A002 /* StableCameraGrabber.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = StableCameraGrabber.mm; sourceTree = "<group>"; };
 		CDA410800000000000000001 /* CoreMLYoloSession.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CoreMLYoloSession.h; sourceTree = "<group>"; };
 		CDA410800000000000000002 /* CoreMLYoloSession.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = CoreMLYoloSession.mm; sourceTree = "<group>"; };
 		"7C3697E3-125D-44DC-9BE3-52693243BBCE" /* opencl_clfft.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = opencl_clfft.hpp; sourceTree = "<group>"; };
@@ -3246,6 +3249,8 @@
 				7BF4A5C0305E5EED000E3B60 /* video_Processing.cpp */,
 				7BF4A5C2305E664C000E3B60 /* CameraAuthorization.h */,
 				7BF4A5C3305E664C000E3B60 /* CameraAuthorization.mm */,
+				5CA3E7A1000000000000A001 /* StableCameraGrabber.h */,
+				5CA3E7A1000000000000A002 /* StableCameraGrabber.mm */,
 				CDA410800000000000000001 /* CoreMLYoloSession.h */,
 				CDA410800000000000000002 /* CoreMLYoloSession.mm */,
 			);
@@ -3446,6 +3451,7 @@
 				E4B69E210A3A1BDC003C02F2 /* ofApp.cpp in Sources */,
 				"B590B4B1-AA8E-4594-8107-C5AD436371D3" /* HumanGraphicsScene.cpp in Sources */,
 				7BF4A5C4305E664C000E3B60 /* CameraAuthorization.mm in Sources */,
+				5CA3E7A1000000000000A003 /* StableCameraGrabber.mm in Sources */,
 				CDA410800000000000000003 /* CoreMLYoloSession.mm in Sources */,
 				"BA4E0450-0827-4A78-8C97-4C11575C96BA" /* ofxBaseGui.cpp in Sources */,
 				"8E41ABF3-AA8C-43E7-A4B2-69402188D7D8" /* ofxButton.cpp in Sources */,

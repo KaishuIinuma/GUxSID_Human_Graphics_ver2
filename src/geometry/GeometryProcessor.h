@@ -7,8 +7,15 @@
 #include "geometry/VertexRemapper.h"
 
 #include <algorithm>
+#include <unordered_map>
 
 namespace gux {
+
+// 人ごとに頂点数とScaleを上書きする (プリセット切り替えの演出用)。
+struct ShapeOverride {
+  int vertexCount = 16;
+  float scale = 1.0f;
+};
 
 struct GeometrySettings {
   int vertexCount = 16;
@@ -18,10 +25,14 @@ struct GeometrySettings {
   float offsetSize = 200.0f;
   float offsetScale = 1.0f;
   OffsetJoinType offsetJoinType = OffsetJoinType::Round;
+  // ここに載っている人は vertexCount / offsetScale の代わりにこの値を使う。
+  const std::unordered_map<ObjectId, ShapeOverride>* shapeOverrides = nullptr;
 };
 
 class GeometryProcessor {
  public:
+  static constexpr float kMinVisibleScale = 0.001f;
+
   std::vector<GeometryObject> process(
       const std::vector<TrackedObject>& trackedObjects,
       const GeometrySettings& settings) const {
@@ -29,11 +40,23 @@ class GeometryProcessor {
     result.reserve(trackedObjects.size());
 
     for (const auto& trackedObject : trackedObjects) {
+      int vertexCount = settings.vertexCount;
+      float scale = settings.offsetScale;
+      if (settings.shapeOverrides) {
+        const auto found = settings.shapeOverrides->find(trackedObject.id);
+        if (found != settings.shapeOverrides->end()) {
+          vertexCount = found->second.vertexCount;
+          scale = found->second.scale;
+        }
+      }
+      // Scaleがほぼ0の時は形が点に潰れるので描かない (切り替えの演出で0まで縮める)。
+      if (scale <= kMinVisibleScale) continue;
+
       const ofPolyline contour = settings.enableLooseContour
           ? looseContourProcessor.process(trackedObject,
                                           settings.looseContourStrength)
           : trackedObject.contour;
-      ofPolyline remapped = vertexRemapper.process(contour, settings.vertexCount);
+      ofPolyline remapped = vertexRemapper.process(contour, vertexCount);
       if (remapped.size() < 3) continue;
 
       ofPolyline target = remapped;
@@ -43,10 +66,10 @@ class GeometryProcessor {
       }
       if (target.size() < 3) continue;
 
-      if (settings.offsetScale != 1.0f) {
+      if (scale != 1.0f) {
         const glm::vec3 centroid = polygonCentroid(remapped);
         for (auto& point : target) {
-          point = centroid + (point - centroid) * settings.offsetScale;
+          point = centroid + (point - centroid) * scale;
         }
       }
       target.setClosed(true);

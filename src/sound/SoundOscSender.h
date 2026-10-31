@@ -85,6 +85,15 @@ class SoundOscSender {
 
   bool isEnabled() const { return enabled; }
 
+  // 次に届く輪郭を動きの基準にする (その間の変化を動きとして数えない)。
+  // プリセット切り替えで形が一度に変わった時に呼ぶ。
+  void resetMotionBaseline() {
+    for (auto& entry : states) {
+      entry.second.previousVertices.clear();
+      entry.second.lastShapeSeconds = -1.0f;
+    }
+  }
+
   // /gux/slot を送るかどうか。スロットの割り当て自体は、送らない時も続ける。
   void setSlotMessagesEnabled(bool value) { slotMessagesEnabled = value; }
 

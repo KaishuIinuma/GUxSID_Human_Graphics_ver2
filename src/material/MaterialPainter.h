@@ -12,8 +12,14 @@ namespace gux {
 // MaterialComponentを実際の塗り・線描画へ変換する唯一の描画窓口。
 class MaterialPainter {
  public:
-  void drawFill(const ofPolyline& polygon,
-                const MaterialComponent& material) const {
+  // reveal (0〜1): 1 未満なら、左下から右上へ色面が入る途中まで描く。
+  void drawFill(const ofPolyline& polygon, const MaterialComponent& material,
+                float reveal = 1.0f) const {
+    if (reveal <= 0.0f || polygon.size() < 3) return;
+    if (reveal < 1.0f) {
+      drawFillWipe(polygon, material, reveal);
+      return;
+    }
     if (material.type == MaterialType::Solid) {
       shapePainter.drawFill(polygon, material.primary);
       return;
@@ -21,15 +27,31 @@ class MaterialPainter {
     drawLinearGradientFill(polygon, material);
   }
 
+  // reveal (0〜1): 1 未満なら、輪郭を一筆書きのように途中までなぞって描く。
   void drawStroke(const ofPolyline& polygon,
                   const MaterialComponent& material, float strokeWeight,
-                  StrokeJoinType joinType) const {
+                  StrokeJoinType joinType, float reveal = 1.0f) const {
     if (!std::isfinite(strokeWeight) || strokeWeight <= 0.0f) return;
+    if (reveal <= 0.0f || polygon.size() < 3) return;
+    if (reveal < 1.0f) {
+      const std::vector<glm::vec2> path = ShapePainter::revealPath(polygon, reveal);
+      if (material.type == MaterialType::Solid) {
+        shapePainter.drawStrokePath(path, false, material.primary, strokeWeight,
+                                    joinType);
+      } else {
+        // グラデーションの向きと範囲は、全体の輪郭から決める (色が途中で動かない)。
+        drawLinearGradientStroke(path, false, gradientAxis(polygon, material),
+                                 material, strokeWeight, joinType);
+      }
+      return;
+    }
     if (material.type == MaterialType::Solid) {
       shapePainter.drawStroke(polygon, material.primary, strokeWeight, joinType);
       return;
     }
-    drawLinearGradientStroke(polygon, material, strokeWeight, joinType);
+    drawLinearGradientStroke(polygon.getVertices(), true,
+                             gradientAxis(polygon, material), material,
+                             strokeWeight, joinType);
   }
 
  private:
@@ -78,12 +100,36 @@ class MaterialPainter {
     mesh.draw();
   }
 
-  static void drawLinearGradientStroke(const ofPolyline& polygon,
+  // 塗りを、左下からの斜めの境界線で切り取って描く (色はそのまま)。
+  static void drawFillWipe(const ofPolyline& polygon,
+                           const MaterialComponent& material, float reveal) {
+    const ofMesh& full = ShapePainter::fillMesh(polygon);
+    if (full.getMode() != OF_PRIMITIVE_TRIANGLES) return;
+    ofMesh mesh = full;
+    if (material.type != MaterialType::Solid) {
+      const GradientAxis axis = gradientAxis(polygon, material);
+      mesh.clearColors();
+      for (const auto& vertex : mesh.getVertices()) {
+        mesh.addColor(colorAt(glm::vec2(vertex.x, vertex.y), axis, material));
+      }
+      ofSetColor(255);
+    } else {
+      mesh.clearColors();
+      ofSetColor(material.primary);
+    }
+    ofMesh clipped = ShapePainter::clipMeshForWipe(mesh, reveal, polygon);
+    if (!clipped.getVertices().empty()) clipped.draw();
+  }
+
+  template <typename Point>
+  static void drawLinearGradientStroke(const std::vector<Point>& points, bool closed,
+                                       const GradientAxis& axis,
                                        const MaterialComponent& material,
                                        float strokeWeight,
                                        StrokeJoinType joinType) {
-    if (polygon.size() < 3) return;
-    const GradientAxis axis = gradientAxis(polygon, material);
+    const size_t n = points.size();
+    if (n < 2 || (closed && n < 3)) return;
+    const auto polygon = [&points](size_t i) { return glm::vec2(points[i].x, points[i].y); };
     const float halfWeight = strokeWeight * 0.5f;
     ofMesh segments;
     ofMesh joints;
@@ -96,15 +142,17 @@ class MaterialPainter {
       mesh.addVertex(glm::vec3(b, 0.0f)); mesh.addColor(cb);
       mesh.addVertex(glm::vec3(c, 0.0f)); mesh.addColor(cc);
     };
-    for (size_t i = 0; i < polygon.size(); ++i) {
-      const glm::vec2 p1 = polygon[i];
-      const glm::vec2 p2 = polygon[(i + 1) % polygon.size()];
-      const glm::vec2 previous = polygon[(i - 1 + polygon.size()) % polygon.size()];
+    for (size_t i = 0; i < n; ++i) {
+      const glm::vec2 p1 = polygon(i);
+      const glm::vec2 p2 = polygon((i + 1) % n);
+      const glm::vec2 previous = polygon((i - 1 + n) % n);
       const glm::vec2 direction = p2 - p1;
       const float length = glm::length(direction);
       const ofColor firstColor = colorAt(p1, axis, material);
       const ofColor secondColor = colorAt(p2, axis, material);
-      if (length > 0.0f) {
+      // 途中で止まる線は、最後の点から最初の点へは結ばない。
+      const bool hasSegment = closed || i + 1 < n;
+      if (length > 0.0f && hasSegment) {
         const glm::vec2 normal = glm::vec2(-direction.y, direction.x) / length * halfWeight;
         triangle(segments, p1 + normal, p1 - normal, p2 + normal,
                  firstColor, firstColor, secondColor);
@@ -124,6 +172,7 @@ class MaterialPainter {
         }
         continue;
       }
+      if (!closed && (i == 0 || i + 1 == n)) continue;  // 線の端には角を付けない
       if (length <= 1e-6f || glm::length2(p1 - previous) <= 1e-12f) continue;
       const glm::vec2 incoming = glm::normalize(p1 - previous);
       const glm::vec2 outgoing = glm::normalize(p2 - p1);

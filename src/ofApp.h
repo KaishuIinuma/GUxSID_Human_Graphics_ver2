@@ -4,6 +4,7 @@
 #include "ofMain.h"
 #include "ofxGui.h"
 #include "ofxOpenCv.h"
+#include <unordered_map>
 #include <future>
 #include <memory>
 #include <opencv2/dnn.hpp>
@@ -51,7 +52,6 @@ public:
   // scene1〜4の色を更新する間隔（ミリ秒）
   // ★修正: GUI/キー操作で実行中に変更できるよう constexpr を外した
   //   (C++17のinline staticなので.cpp側の定義は不要)
-  static inline uint64_t colorUpdateIntervalMs = 10000;
 
   // 輪郭のリサンプリング頂点数（scene1〜4共通、GUI/キー操作で変更可能）
   static inline int vertexCount = 16;
@@ -105,18 +105,32 @@ public:
   ofParameter<int> pCameraIndex;       // GUIで選択するカメラID
   ofParameter<string> pCameraName;     // 選択中カメラの名前表示用
 
-  // data/presets/ 内のJSONプリセットを選ぶためのUI。
-  // 0以降が presetPaths の各ファイルに対応し、末尾は「選択なし」。
-  // ofxGuiの整数スライダーで最後のファイルも選べるよう、選択なしを末尾に置く。
-  vector<string> presetPaths;
-  ofParameter<int> pPresetIndex;
-  ofParameter<string> pPresetName;
-  ofParameter<string> pPresetStatus;
-  string loadedPresetFileName;
-  ofJson loadedPresetSnapshot;
-  bool hasLoadedPresetSnapshot = false;
-  bool presetIsDirty = false;
-  ofEventListener presetParameterChangedListener;
+  // Auto Cycle: Cycle Interval ごとに Fill (Base Enable) と Stroke (Stroke Enable)
+  // のトグルを入れ替える (設定は controls.json に保存)。
+  ofParameter<bool> pAutoCycle;
+  ofParameter<float> pCycleSeconds;
+  uint64_t lastCycleSwitchMs = 0;  // 最後に切り替えた時刻
+  void updateAutoCycle();
+  void applyNextCycleLook();
+  // 切り替えの演出: 一人ひとりが Transition Window の中のランダムな時刻に、
+  // 前の見た目の形を消し、新しい見た目の形が Transition の長さで
+  // 現れる (塗りは左下から色面が入り、線は一筆書きのようになぞる)。
+  // 変化の途中は前の見た目の Scene と新しい見た目の Scene を重ねて描き、
+  // 人ごとにどちらで描くかを割り振る。
+  ofParameter<float> pTransitionSeconds;        // 1人分の変化の長さ
+  ofParameter<float> pTransitionWindowSeconds;  // 全員の変化が収まる時間
+  bool cycleTransitionActive = false;
+  uint64_t cycleTransitionStartMs = 0;
+  float cycleTransitionEndSeconds = 0.0f;
+  std::shared_ptr<HumanGraphicsScene> outgoingScenes[2];  // 前の見た目 (上段・下段)
+  bool outgoingSceneActive[2] = {false, false};
+  std::unordered_map<gux::ObjectId, float> transitionStartSeconds[2];
+  void startCycleTransition();
+  void updateCycleTransition();
+  void finishCycleTransition();
+  void onTransitionSecondsChanged(float &value);
+  void onAutoCycleChanged(bool &value);
+  void onCycleSecondsChanged(float &value);
 
   void onCameraIndexChanged(int &index); // カメラIDが変更された時のリスナー
 
@@ -138,17 +152,6 @@ public:
   void onCameraChoiceChanged(int input, int device, bool value);
   void applyCameraSelection();
   static std::string cameraDisplayName(const ofVideoDevice &device);
-
-  // カメラは番号ではなく機器ごとの固有の名前(キー)で保存する。
-  // macOSのカメラ番号は、iPhone(連係カメラ)の有無やUSBの挿し順で変わるため。
-  // pCameraKey / pCamera2Key は controls.json にだけ保存し、Controlsには出さない。
-  ofParameter<string> pCameraKey;
-  ofParameter<string> pCamera2Key;
-  static std::string cameraKey(const ofVideoDevice &device);
-  int findCameraByKey(const std::string &key) const;
-  // 起動時: 保存済みのキーから、今のカメラ番号を探し直す。
-  void resolveSavedCameras();
-  bool keepSavedCameraKeys = false;
 
   // ============================================
   // ★追加: 読み取った映像の左右反転（Realtimeモードのみ有効）
@@ -210,8 +213,6 @@ public:
 
   ofxPanel gui;
   ofParameterGroup guiParams;
-  // プリセット用の設定群。入力モード（Realtime / Video）は含めない。
-  ofParameterGroup presetParams;
   bool isLoadingGuiSettings = false;
 
   // Main Windowの動作状況と描画目標FPSをControlsへ表示する。
@@ -228,8 +229,11 @@ public:
   ofParameter<int> pVertexCount;        // 頂点数 4〜100
   ofParameter<bool> pLooseContour;       // 安定した緩い輪郭
   ofParameter<float> pLooseContourStrength; // 輪郭変形幅。人物幅に対する割合(%)
+  // これより小さく映る人は描かない。人の大きさ (外接矩形の長い辺) が
+  // 画面の高さに占める割合 0〜1。0 なら全員を描く。
+  ofParameter<float> pMinPersonSize;
+  void onMinPersonSizeChanged(float &value);
   ofParameter<float> pAspectRatio; // 検出前の元フレームの縦横比変化率(%)
-  ofParameter<float> pColorUpdateIntervalSec; // 色の更新頻度(秒) 0〜20
   // Video専用。1人は指定色、2人以上は動画読込時に選んだ色を固定できる。
   ofParameter<int> pVideoPeopleCount;
   ofParameter<int> pVideoSoloColor;
@@ -262,9 +266,6 @@ public:
   ofParameter<float> pPaperShadowAngle;   // 影の向き（0 = 右, 90 = 真下）
   ofParameter<float> pPaperShadowOpacity; // 影の濃さの倍率
   // 背景のグラデーション。白の上にオフホワイトのにじみを漂わせる。
-  ofParameter<bool> pBackgroundGradientEnable;
-  ofParameter<float> pBackgroundGradientDepth; // にじみの濃さ
-  ofParameter<float> pBackgroundGradientSpeed; // 漂う速さ
 
   // 音のソフト（TouchDesignerなど）へ人物の情報をOSCで送る。送信先は同じMacの127.0.0.1。
   ofParameter<bool> pSoundOscEnable;
@@ -319,8 +320,6 @@ public:
   ofxButton restartButton;
   ofxButton openVideoButton;
   ofxButton exportImageSequenceButton;
-  ofxButton savePresetButton;
-  ofxButton revertPresetButton;
 
   void setupGuiParameters();
   void updateControlsMetrics();
@@ -330,7 +329,6 @@ public:
   void onLooseContourChanged(bool &value);
   void onLooseContourStrengthChanged(float &value);
   void onAspectRatioChanged(float &value);
-  void onColorUpdateIntervalChanged(float &value);
   void onVideoPeopleCountChanged(int &value);
   void onVideoSoloColorChanged(int &value);
   void onVideoColorLockChanged(bool &value);
@@ -349,8 +347,6 @@ public:
   void onRestartPressed();
   void onOpenVideoPressed();
   void onExportImageSequencePressed();
-  void onSavePresetPressed();
-  void onRevertPresetPressed();
 
   // Realtime/動画モードの切り替えに応じて、Control Windowの
   // パネル構成（表示するウィジェット）を組み直す
@@ -375,18 +371,7 @@ public:
   // GUI設定の永続化と、Controls Windowの表示／再生成（Aキー）
   void setupGuiPersistence();
   void loadGuiSettings();
-  void saveGuiSettings() const;  // 保存の予約（実際の書き込みは flushGuiSettings）
-  void flushGuiSettings(bool force) const;
-  void writeGuiSettings() const;
-  static constexpr uint64_t kGuiSettingsSaveDelayMs = 500;
-  mutable bool guiSettingsDirty = false;
-  mutable uint64_t guiSettingsDirtySinceMs = 0;
-  void discoverPresetFiles();
-  void onPresetIndexChanged(int &index);
-  void updatePresetDirtyState();
-  void captureLoadedPresetSnapshot();
-  void clearLoadedPresetSnapshot();
-  int findPresetIndexByFileName(const string &fileName) const;
+  void saveGuiSettings() const;
   int getDefaultCameraIndex() const;
   void showGuiWindow();
   void showMainWindow();

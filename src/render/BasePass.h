@@ -9,7 +9,7 @@ class BasePass final : public RenderPass {
  public:
   void draw(const SceneObject& object,
             const RenderContext&) const override {
-    painter.drawFill(object.geometry, object.appearance.baseMaterial);
+    painter.drawFill(object.geometry, object.appearance.baseMaterial, object.reveal);
   }
 
  private:

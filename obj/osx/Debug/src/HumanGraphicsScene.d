@@ -587,8 +587,7 @@ obj/osx/Debug/src/HumanGraphicsScene.o: \
   src/tracking/TrackedObject.h src/scene/AppearanceComponent.h \
   src/geometry/GeometryProcessor.h src/geometry/LooseContourProcessor.h \
   src/geometry/OffsetProcessor.h src/geometry/VertexRemapper.h \
-  src/material/MaterialAssignmentSystem.h \
-  src/render/BackgroundGradientPass.h src/render/MixRenderRecipe.h \
+  src/material/MaterialAssignmentSystem.h src/render/MixRenderRecipe.h \
   src/render/BasePass.h src/render/RenderPass.h \
   src/render/RenderContext.h src/material/MaterialPainter.h \
   src/render/ShapePainter.h src/render/RenderRecipe.h \
@@ -1207,7 +1206,6 @@ src/geometry/LooseContourProcessor.h:
 src/geometry/OffsetProcessor.h:
 src/geometry/VertexRemapper.h:
 src/material/MaterialAssignmentSystem.h:
-src/render/BackgroundGradientPass.h:
 src/render/MixRenderRecipe.h:
 src/render/BasePass.h:
 src/render/RenderPass.h:

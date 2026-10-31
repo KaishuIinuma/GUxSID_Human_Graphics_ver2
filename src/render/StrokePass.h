@@ -11,7 +11,7 @@ class StrokePass final : public RenderPass {
             const RenderContext& context) const override {
     painter.drawStroke(object.geometry, object.appearance.outlineMaterial,
                        context.strokeWeight,
-                       context.strokeJoinType);
+                       context.strokeJoinType, object.reveal);
   }
 
  private:
